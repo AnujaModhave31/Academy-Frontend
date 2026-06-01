@@ -1,0 +1,743 @@
+"use client";
+
+import { useAuth } from "@/components/AuthProvider";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import type { Curriculum } from "@/lib/types";
+import { canAccessDashboard, roleLabel } from "@/lib/auth";
+import { computeStudentAnalytics } from "@/lib/student-analytics";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+import {
+  ArrowRight,
+  BookOpen,
+  Brain,
+  Flame,
+  LayoutDashboard,
+  LogOut,
+  Map,
+  Play,
+  Sparkles,
+  Target,
+  Trophy,
+  TreePine,
+  Zap,
+  Shield,
+  TrendingUp,
+  Award,
+  Clock,
+  Gift,
+  Copy,
+  Wallet,
+  CheckCircle2,
+  User,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { ReferAndEarnTab } from "./ReferAndEarnTab";
+
+function GlassCard({
+  children,
+  className = "",
+  glow,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  glow?: string;
+}) {
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface)] to-[var(--surface)]/60 p-6 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.04)] transition-all duration-500 hover:-translate-y-2 hover:border-mst-red/30 hover:shadow-[0_12px_40px_rgba(227,30,36,0.12)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.1)] ${className}`}
+      style={glow ? { boxShadow: `0 0 40px ${glow}` } : undefined}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-mst-red/10 opacity-30 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100" />
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+
+function Gauge({ value, label, color }: { value: number; label: string; color: string }) {
+  const r = 36;
+  const c = 2 * Math.PI * r;
+  const dash = (value / 100) * c;
+  return (
+    <div className="flex flex-col items-center">
+      <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
+        <circle cx="44" cy="44" r={r} stroke="var(--border)" strokeWidth="8" fill="none" />
+        <circle
+          cx="44"
+          cy="44"
+          r={r}
+          stroke={color}
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c - dash}`}
+        />
+      </svg>
+      <p className="-mt-12 text-lg font-black text-[var(--text)]">{value}%</p>
+      <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum }) {
+  const router = useRouter();
+  const { user, ready, logout, isAdmin } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "refer">(() => {
+    if (typeof window !== "undefined") {
+      if (window.location.hash === "#refer-earn") return "refer";
+    }
+    return "overview";
+  });
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  useEffect(() => {
+    // Check immediately on mount in case of soft navigation
+    if (window.location.hash === "#refer-earn") {
+      setActiveTab("refer");
+    }
+
+    const handleHashChange = () => {
+      if (window.location.hash === "#refer-earn") setActiveTab("refer");
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      router.replace("/login?role=student");
+      return;
+    }
+    if (!canAccessDashboard("student")) router.replace("/login");
+  }, [ready, user, router]);
+
+  const analytics = useMemo(() => {
+    if (!mounted) return null;
+    return computeStudentAnalytics(curriculum);
+  }, [mounted, curriculum]);
+
+  if (!ready || !user || !analytics) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--border)] border-t-mst-red" />
+      </div>
+    );
+  }
+
+  const firstName = user.fullName.split(" ")[0];
+  const referralCode = `MST-${user.id.slice(-6).toUpperCase()}`;
+  const referralLink = `https://masterstroke.academy/register?ref=${referralCode}`;
+  const referralRecords = [
+    { name: "Riya S.", joinedAt: "12 May 2026", status: "Completed course", eligible: true },
+    { name: "Aman K.", joinedAt: "14 May 2026", status: "Completed course", eligible: true },
+    { name: "Neha P.", joinedAt: "16 May 2026", status: "In progress", eligible: false },
+    { name: "Vikram T.", joinedAt: "18 May 2026", status: "Completed course", eligible: true },
+    { name: "Priya M.", joinedAt: "21 May 2026", status: "Completed course", eligible: true },
+    { name: "Rohit D.", joinedAt: "24 May 2026", status: "Completed course", eligible: true },
+  ] as const;
+  const successfulReferrals = referralRecords.filter((record) => record.eligible).length;
+  const withdrawUnlocked = successfulReferrals >= 5;
+  const xpPct = Math.round(
+    ((analytics.xp % 120) / Math.max(analytics.xpToNext, 1)) * 100
+  );
+  const currentPhaseIndex = Math.max(1, analytics.phaseJourney.findIndex(p => p.phaseId === analytics.currentPhaseId) + 1);
+
+  const today = new Date();
+  const currentMonthDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const currentMonth = currentMonthDate.getMonth();
+  const currentYear = currentMonthDate.getFullYear();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const monthName = currentMonthDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+
+  const monthData = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = new Date(Date.UTC(currentYear, currentMonth, i + 1));
+    const key = d.toISOString().slice(0, 10);
+    const existing = analytics.activityHeatmap.find(h => h.date === key);
+    return { date: key, count: existing ? existing.count : 0 };
+  });
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] bg-[var(--bg)] overflow-hidden">
+      {/* Sidebar attached to left edge */}
+      <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex relative z-20">
+          {/* profile */}
+          <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-mst-red text-sm font-bold text-white">
+              {user.fullName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[var(--text)]">
+                {user.fullName}
+              </p>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                Phase {currentPhaseIndex}
+              </p>
+            </div>
+          </div>
+          {/* nav */}
+          <nav className="flex-1 space-y-1 px-3 py-4">
+              {[
+                { id: "overview", icon: LayoutDashboard, label: "Command Center" },
+                { href: "/learn", icon: TreePine, label: "Learning Roadmap" },
+                { href: "/leaderboard", icon: Trophy, label: "Leaderboard" },
+              ].map((item) => {
+                if (item.id || item.onClick) {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id || item.href}
+                      onClick={() => {
+                        if (item.onClick) item.onClick();
+                        else if (item.id) setActiveTab(item.id as "overview" | "refer");
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${isActive
+                        ? "bg-mst-red/10 text-mst-red"
+                        : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                        }`}
+                    >
+                      <item.icon size={16} />
+                      {item.label}
+                    </button>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href!}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                  >
+                    <item.icon size={16} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="mt-auto border-t border-[var(--border)] px-3 py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  router.push("/login");
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+              >
+                <LogOut size={16} />
+                Sign Out
+              </button>
+            </div>
+        </aside>
+
+        {/* Main Wrapper */}
+        <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Ambient background isolated to main area */}
+          <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" aria-hidden />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 50% 40% at 20% 10%, rgba(168,85,247,0.12), transparent 55%), radial-gradient(ellipse 45% 35% at 80% 80%, rgba(59,130,246,0.1), transparent 50%)",
+            }}
+            aria-hidden
+          />
+          
+          {/* Main */}
+          <main className="relative z-10 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="mx-auto max-w-6xl">
+              {/* Mobile header */}
+              <div className="mb-4 flex items-center justify-between lg:hidden">
+                <p className="text-sm font-bold text-[var(--text)]">
+                  Command Center
+                </p>
+                <ThemeToggle />
+              </div>
+
+            {activeTab === 'refer' ? (
+              <div className="space-y-6">
+                <ReferAndEarnTab
+                  referralCode={referralCode}
+                  referralLink={referralLink}
+                  referralRecords={referralRecords}
+                  successfulReferrals={successfulReferrals}
+                  withdrawUnlocked={withdrawUnlocked}
+                />
+              </div>
+            ) : (
+              <>
+                {/* Hero */}
+                <motion.section
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface)] to-[var(--surface)]/40 p-6 backdrop-blur-3xl sm:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-all duration-500 hover:shadow-[0_20px_80px_rgba(168,85,247,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
+                >
+                  <div className="absolute -right-20 -top-20 h-[500px] w-[500px] rounded-full bg-purple-500/20 blur-[120px] transition-all duration-1000 group-hover:bg-purple-500/30 group-hover:scale-110" />
+                  <div className="absolute -bottom-24 -left-24 h-[400px] w-[400px] rounded-full bg-mst-red/20 blur-[100px] transition-all duration-1000 group-hover:bg-mst-red/30 group-hover:scale-110" />
+                  <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] text-mst-red">
+                        Personal learning command center
+                      </p>
+                      <h1 className="mt-3 text-3xl font-black tracking-tight text-[var(--text)] sm:text-4xl">
+                        Welcome back, {firstName} <span className="inline-block origin-[70%_70%] hover:animate-pulse cursor-default">👋</span>
+                      </h1>
+                      <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">
+                        You are ahead of{" "}
+                        <strong className="text-[var(--text)]">{analytics.percentile}%</strong> of
+                        learners this week. Keep pushing - your next milestone is close.
+                      </p>
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <span className="flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-3.5 py-1.5 text-xs font-bold text-orange-500 shadow-sm backdrop-blur-sm transition hover:bg-orange-500/20">
+                          <Flame className="mr-1.5 h-4 w-4" />
+                          {analytics.streakDays}d streak
+                        </span>
+                        <span className="flex items-center rounded-full border border-purple-500/40 bg-purple-500/10 px-3.5 py-1.5 text-xs font-bold text-purple-400 shadow-sm backdrop-blur-sm transition hover:bg-purple-500/20">
+                          Phase: {analytics.currentPhaseTitle.slice(0, 28)}
+                        </span>
+                        <span className="flex items-center rounded-full border border-blue-500/40 bg-blue-500/10 px-3.5 py-1.5 text-xs font-bold text-blue-400 shadow-sm backdrop-blur-sm transition hover:bg-blue-500/20">
+                          Rank #{analytics.rank}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-5">
+                      <div className="relative flex h-24 w-24 items-center justify-center sm:h-28 sm:w-28">
+                        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="6" />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="42"
+                            fill="none"
+                            stroke="url(#lvlGrad)"
+                            strokeWidth="6"
+                            strokeLinecap="round"
+                            strokeDasharray={`${analytics.overallProgress * 2.64} 264`}
+                          />
+                          <defs>
+                            <linearGradient id="lvlGrad" x1="0" y1="0" x2="100" y2="100">
+                              <stop offset="0%" stopColor="#e31e24" />
+                              <stop offset="100%" stopColor="#a855f7" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                        <div className="text-center">
+                          <p className="text-2xl font-black text-[var(--text)]">P{currentPhaseIndex}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                            Phase
+                          </p>
+                        </div>
+                      </div>
+                      <div className="min-w-[150px]">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Course Progress</p>
+                        <p className="mt-1 text-2xl font-black tracking-tight text-[var(--text)]">
+                          {analytics.overallProgress}% <span className="text-sm font-bold text-[var(--text-muted)]">Complete</span>
+                        </p>
+                        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--border)]/50 shadow-inner">
+                          <motion.div
+                            className="relative h-full rounded-full bg-gradient-to-r from-mst-red via-purple-500 to-blue-500"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, analytics.overallProgress)}%` }}
+                            transition={{ duration: 1.5, ease: "easeOut" }}
+                          />
+                        </div>
+                        <p className="mt-2 flex justify-between text-[11px] font-medium text-[var(--text-muted)]">
+                          <span>{100 - analytics.overallProgress}% to go</span>
+                          {analytics.overallProgress < 100 && (
+                            <span className="font-bold text-[var(--text)]">Keep learning</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative mt-8 rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-transparent p-5 backdrop-blur-sm transition-all duration-300 hover:border-purple-500/50 hover:from-purple-500/15">
+                    <div className="absolute -left-px top-1/2 h-1/2 w-[3px] -translate-y-1/2 rounded-full bg-purple-500" />
+                    <p className="flex items-start gap-3 text-sm text-[var(--text-muted)]">
+                      <Sparkles className="mt-0.5 h-5 w-5 shrink-0 animate-pulse text-purple-400" />
+                      <span className="leading-relaxed">
+                        <strong className="font-extrabold tracking-wide text-[var(--text)]">AI Mentor:</strong>{" "}
+                        {analytics.insights[0] ?? "Start your first lesson to unlock personalized insights."}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <a
+                      href="#refer-earn"
+                      className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-500 transition hover:bg-emerald-500/20"
+                    >
+                      <Gift className="h-3.5 w-3.5" />
+                      Open Refer & Earn
+                    </a>
+                  </div>
+                </motion.section>
+
+                {/* Stats grid */}
+                <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+                  {[
+                    { label: "Completion", value: `${analytics.overallProgress}%`, icon: Target, color: "text-mst-red", bg: "bg-mst-red/10 border-mst-red/20" },
+                    { label: "Modules", value: `${analytics.modulesCompleted}/${analytics.totalModules}`, icon: BookOpen, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+                    { label: "Avg Score", value: analytics.averageScore > 0 ? `${analytics.averageScore}%` : "—", icon: Award, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
+                    { label: "Study Time", value: `${analytics.totalStudyHours}h`, icon: Clock, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
+                    { label: "Focus", value: `${analytics.focusScore}%`, icon: Zap, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
+                    { label: "Consistency", value: `${analytics.revisionConsistency}%`, icon: TrendingUp, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
+                    { label: "Coins", value: analytics.coinBalance, icon: Flame, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
+                    { label: "Percentile", value: `Top ${analytics.percentile}%`, icon: Trophy, color: "text-mst-red", bg: "bg-mst-red/10 border-mst-red/20" },
+                  ].map((s, i) => (
+                    <GlassCard key={s.label} className="!p-6 flex flex-col gap-3 group cursor-default">
+                      <div className={`w-fit rounded-xl border ${s.bg} p-3 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                        <s.icon className={`h-5 w-5 ${s.color}`} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                          {s.label}
+                        </p>
+                        <p className="mt-1 text-2xl font-black text-[var(--text)] tracking-tight">{s.value}</p>
+                      </div>
+                    </GlassCard>
+                  ))}
+                </section>
+
+                {/* Phase journey */}
+                <section id="refer-earn" className="mt-8 scroll-mt-24">
+                  <h2 className="mb-4 text-lg font-black text-[var(--text)]">Learning Journey</h2>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {analytics.phaseJourney.map((ph, i) => (
+                      <Link
+                        key={ph.phaseId}
+                        href="/learn"
+                        className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${ph.status === "active"
+                          ? "border-orange-500/50 bg-gradient-to-br from-orange-500/10 to-transparent shadow-lg shadow-orange-500/10"
+                          : ph.status === "completed"
+                            ? "border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-transparent"
+                            : "border-[var(--border)] bg-[var(--surface)]/60 opacity-70 hover:opacity-100"
+                          }`}
+                      >
+                        {ph.status === "active" && (
+                          <span className="absolute right-4 top-4 h-2.5 w-2.5 animate-pulse rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                        )}
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                          Phase {i + 1}
+                        </p>
+                        <p className="mt-1.5 line-clamp-2 text-sm font-bold leading-snug text-[var(--text)]">{ph.title}</p>
+                        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--border)] shadow-inner">
+                          <div
+                            className={`h-full rounded-full transition-all duration-1000 ${ph.status === "completed"
+                              ? "bg-emerald-500"
+                              : "bg-gradient-to-r from-mst-red to-orange-500"
+                              }`}
+                            style={{ width: `${ph.percent}%` }}
+                          />
+                        </div>
+                        <p className="mt-2 text-xs font-bold text-[var(--text-muted)]">{ph.percent}%</p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Charts row 1 */}
+                <section className="mt-8 grid gap-4 lg:grid-cols-2">
+                  <GlassCard>
+                    <h3 className="text-sm font-black text-[var(--text)]">Your Learning Growth</h3>
+                    <div className="mt-4 h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={analytics.growthData}>
+                          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="week" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12 }} />
+                          <Line type="monotone" dataKey="progress" stroke="#e31e24" strokeWidth={2.5} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="score" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-sm font-black text-[var(--text)]">Skill Strength Analysis</h3>
+                    <div className="mt-2 h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart data={analytics.skillRadar}>
+                          <PolarGrid stroke="var(--border)" />
+                          <PolarAngleAxis dataKey="skill" tick={{ fill: "var(--text-muted)", fontSize: 9 }} />
+                          <Radar dataKey="value" stroke="#a855f7" fill="#a855f7" fillOpacity={0.35} />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </GlassCard>
+                </section>
+
+                {/* Charts row 2 */}
+                <section className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <GlassCard className="lg:col-span-1">
+                    <h3 className="text-sm font-black text-[var(--text)]">Course Completion</h3>
+                    <div className="mt-2 h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.completionDonut}
+                            dataKey="value"
+                            innerRadius={45}
+                            outerRadius={70}
+                            paddingAngle={4}
+                          >
+                            {analytics.completionDonut.map((e) => (
+                              <Cell key={e.name} fill={e.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-3 text-[10px] font-bold">
+                      {analytics.completionDonut.map((e) => (
+                        <span key={e.name} className="flex items-center gap-1 text-[var(--text-muted)]">
+                          <span className="h-2 w-2 rounded-full" style={{ background: e.color }} />
+                          {e.name}
+                        </span>
+                      ))}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard className="lg:col-span-2">
+                    <h3 className="text-sm font-black text-[var(--text)]">Module Performance</h3>
+                    <div className="mt-4 h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analytics.moduleScores.length ? analytics.moduleScores : [{ name: "—", score: 0, moduleId: 0 }]}>
+                          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fill: "var(--text-muted)", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fill: "var(--text-muted)", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <Tooltip />
+                          <Bar dataKey="score" radius={[4, 4, 0, 0]} fill="#e31e24" maxBarSize={28} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </GlassCard>
+                </section>
+
+                {/* Heatmap + study time */}
+                <section className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <GlassCard>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-black text-[var(--text)]">Daily Consistency</h3>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setMonthOffset(prev => prev - 1)} className="p-1 rounded-md hover:bg-[var(--bg-muted)] transition-colors">
+                          <ChevronLeft className="h-4 w-4 text-[var(--text-muted)]" />
+                        </button>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] min-w-[70px] text-center">
+                          {monthName}
+                        </span>
+                        <button onClick={() => setMonthOffset(prev => prev + 1)} className="p-1 rounded-md hover:bg-[var(--bg-muted)] transition-colors" disabled={monthOffset >= 0}>
+                          <ChevronRight className={`h-4 w-4 ${monthOffset >= 0 ? 'text-[var(--border)]' : 'text-[var(--text-muted)]'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-5 flex flex-wrap gap-2 sm:gap-2.5">
+                      {monthData.map((d) => (
+                        <div
+                          key={d.date}
+                          title={`${d.date}: ${d.count} activities`}
+                          className="h-6 w-6 sm:h-8 sm:w-8 shrink-0 rounded-md transition-transform hover:scale-110"
+                          style={{
+                            background:
+                              d.count === 0
+                                ? "var(--border)"
+                                : d.count === 1
+                                  ? "rgba(227,30,36,0.35)"
+                                  : d.count >= 3
+                                    ? "#e31e24"
+                                    : "rgba(227,30,36,0.65)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-sm font-black text-[var(--text)]">Weekly Study Time</h3>
+                    <div className="mt-4 h-44">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analytics.dailyStudy}>
+                          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="day" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                          <Tooltip />
+                          <Bar dataKey="minutes" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                          <Bar dataKey="logins" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </GlassCard>
+                </section>
+
+                {/* AI Insights */}
+                <section className="mt-8">
+                  <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-[var(--text)]">
+                    <Brain className="h-5 w-5 text-purple-400" />
+                    AI Improvement Insights
+                  </h2>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {analytics.insights.map((text, i) => (
+                      <GlassCard key={i} glow="rgba(168,85,247,0.12)">
+                        <p className="text-sm leading-relaxed text-[var(--text-muted)]">{text}</p>
+                      </GlassCard>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <GlassCard>
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-500">Strengths</p>
+                      <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                        {analytics.strengths.length ? analytics.strengths.join(" · ") : "Complete assessments to discover strengths"}
+                      </p>
+                    </GlassCard>
+                    <GlassCard>
+                      <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Improve</p>
+                      <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                        {analytics.weaknesses.length ? analytics.weaknesses.join(" · ") : "Keep learning — weaknesses will appear here"}
+                      </p>
+                    </GlassCard>
+                  </div>
+                </section>
+
+                {/* Learning health */}
+                <section className="mt-8">
+                  <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-[var(--text)]">
+                    <Shield className="h-5 w-5 text-blue-400" />
+                    Learning Health
+                  </h2>
+                  <GlassCard>
+                    <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+                      <Gauge value={100 - analytics.health.burnoutRisk} label="Energy" color="#22c55e" />
+                      <Gauge value={analytics.health.focusScore} label="Focus" color="#f97316" />
+                      <Gauge value={analytics.health.retentionScore} label="Retention" color="#a855f7" />
+                      <Gauge value={analytics.health.revisionHealth} label="Revision" color="#3b82f6" />
+                      <Gauge value={analytics.health.learningSpeed} label="Speed" color="#eab308" />
+                      <Gauge value={analytics.health.confidence} label="Confidence" color="#e31e24" />
+                    </div>
+                  </GlassCard>
+                </section>
+
+                {/* Next actions */}
+                <section className="mt-8">
+                  <h2 className="mb-4 text-lg font-black text-[var(--text)]">What To Do Next</h2>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {analytics.nextActions.map((action) => (
+                      <Link
+                        key={action.label}
+                        href={action.href}
+                        className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-5 py-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(227,30,36,0.2)] ${action.priority === "high"
+                          ? "border-mst-red/40 bg-gradient-to-r from-mst-red/10 to-orange-500/5"
+                          : "border-[var(--border)] bg-[var(--surface)]/70 hover:border-mst-red/40"
+                          }`}
+                      >
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-mst-red/0 via-mst-red/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                        <div className="relative z-10 flex items-center gap-3">
+                          {action.icon === "play" && <Play className="h-5 w-5 text-mst-red transition-transform duration-300 group-hover:scale-110" />}
+                          {action.icon === "map" && <Map className="h-5 w-5 text-purple-400 transition-transform duration-300 group-hover:scale-110" />}
+                          {action.icon === "brain" && <Brain className="h-5 w-5 text-blue-400 transition-transform duration-300 group-hover:scale-110" />}
+                          {action.icon === "trophy" && <Trophy className="h-5 w-5 text-amber-500 transition-transform duration-300 group-hover:scale-110" />}
+                          <span className="text-sm font-bold text-[var(--text)] group-hover:text-mst-red transition-colors">{action.label}</span>
+                        </div>
+                        <ArrowRight className="relative z-10 h-4 w-4 text-[var(--text-muted)] transition-all duration-300 group-hover:translate-x-1 group-hover:text-mst-red" />
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Achievements + ranking */}
+                <section className="mt-8 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h2 className="mb-4 text-lg font-black text-[var(--text)]">Achievements</h2>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {analytics.achievements.map((a) => (
+                        <div
+                          key={a.id}
+                          className={`rounded-2xl border p-4 text-center transition ${a.unlocked
+                            ? "border-amber-500/40 bg-amber-500/5 shadow-lg shadow-amber-500/10"
+                            : "border-[var(--border)] bg-[var(--surface)]/50 opacity-50 grayscale"
+                            }`}
+                        >
+                          <span className="text-2xl">{a.emoji}</span>
+                          <p className="mt-2 text-xs font-black text-[var(--text)]">{a.title}</p>
+                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">{a.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <GlassCard glow="rgba(227,30,36,0.1)">
+                    <h3 className="text-sm font-black text-[var(--text)]">Community Ranking</h3>
+                    <p className="mt-4 text-4xl font-black text-gradient-red">#{analytics.rank}</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Top {analytics.percentile}% of academy learners
+                    </p>
+                    <div className="mt-4 space-y-2 text-sm">
+                      <p className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Modules completed</span>
+                        <span className="font-bold">{analytics.modulesCompleted}/{analytics.totalModules}</span>
+                      </p>
+                      <p className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Coin balance</span>
+                        <span className="font-bold text-amber-500">{analytics.coinBalance} $MSTC</span>
+                      </p>
+                      <p className="flex justify-between">
+                        <span className="text-[var(--text-muted)]">Current module</span>
+                        <span className="font-bold truncate max-w-[160px]">{analytics.activeModuleTitle}</span>
+                      </p>
+                    </div>
+                    <Link
+                      href="/leaderboard"
+                      className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-mst-red hover:underline"
+                    >
+                      View full leaderboard
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </GlassCard>
+                </section>
+
+
+
+                <div className="mt-10 pb-8 text-center">
+                  <Link
+                    href="/learn"
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-mst-red to-purple-600 px-8 py-3.5 text-sm font-bold text-white shadow-xl shadow-mst-red/25 transition hover:brightness-110"
+                  >
+                    <TreePine className="h-5 w-5" />
+                    Continue on Learning Roadmap
+                  </Link>
+                </div>
+              </>
+            )}
+            </div>
+          </main>
+        </div>
+    </div>
+  );
+}
