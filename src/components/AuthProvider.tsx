@@ -22,10 +22,10 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   ready: false,
-  refresh: () => {},
-  logout: () => {},
+  refresh: () => { },
+  logout: () => { },
   isAdmin: false,
-  updateProfile: () => {},
+  updateProfile: () => { },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ready,
         refresh,
         logout,
-        isAdmin: user?.role === "admin",
+        isAdmin: user?.role === "admin" || user?.role === "ADMIN",
         updateProfile,
       }}
     >

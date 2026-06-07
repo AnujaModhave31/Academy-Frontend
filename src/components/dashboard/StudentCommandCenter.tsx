@@ -54,8 +54,10 @@ import {
   ChevronRight,
   ClipboardCheck,
   BarChart3,
+  Users,
 } from "lucide-react";
 import { StudentProfile } from "@/components/dashboard/StudentProfile";
+import { ReferAndEarnTab } from "@/components/dashboard/ReferAndEarnTab";
 
 function PlaceholderTab({ title, icon: Icon, description }: { title: string; icon: any; description: string }) {
   return (
@@ -126,10 +128,18 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
       if (hash === "#assessments") return "assessments";
       if (hash === "#progress") return "progress";
       if (hash === "#profile") return "profile";
+      if (hash === "#refer") return "refer";
     }
     return "overview";
   });
   const [monthOffset, setMonthOffset] = useState(0);
+  const [basePath, setBasePath] = useState("/dashboard/student");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBasePath(window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -137,6 +147,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
       if (hash === "#assessments") setActiveTab("assessments");
       else if (hash === "#progress") setActiveTab("progress");
       else if (hash === "#profile") setActiveTab("profile");
+      else if (hash === "#refer") setActiveTab("refer");
       else setActiveTab("overview");
     };
 
@@ -205,137 +216,155 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
     <div className="flex h-[calc(100vh-4rem)] bg-[var(--bg)] overflow-hidden">
       {/* Sidebar attached to left edge */}
       <aside className="hidden h-full w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex relative z-20">
-          {/* profile */}
-          <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-mst-red text-sm font-bold text-white">
-              {user.fullName.charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[var(--text)]">
-                {user.fullName}
-              </p>
-              <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                Phase {currentPhaseIndex}
-              </p>
-            </div>
+        {/* profile */}
+        <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-mst-red text-sm font-bold text-white">
+            {user.fullName.charAt(0).toUpperCase()}
           </div>
-          {/* nav */}
-          <nav className="flex-1 space-y-1 px-3 py-4">
-              {[
-                { id: "overview", href: "/dashboard/student", icon: LayoutDashboard, label: "Overview" },
-                { href: "/learn", icon: TreePine, label: "Learning Tree" },
-                { id: "assessments", href: "/dashboard/student#assessments", icon: ClipboardCheck, label: "Assessments" },
-                { id: "progress", href: "/dashboard/student#progress", icon: BarChart3, label: "Progress" },
-                { id: "profile", href: "/dashboard/student#profile", icon: User, label: "Profile" },
-              ].map((item) => {
-                const isActive = item.id ? activeTab === item.id : false;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => {
-                      if (item.id && item.id !== "overview") {
-                        setTimeout(() => window.dispatchEvent(new HashChangeEvent("hashchange")), 50);
-                      } else if (item.id === "overview") {
-                        window.history.pushState(null, "", "/dashboard/student");
-                        setTimeout(() => window.dispatchEvent(new HashChangeEvent("hashchange")), 50);
-                      }
-                    }}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      isActive
-                        ? "bg-mst-red/10 text-mst-red"
-                        : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
-                    }`}
-                  >
-                    <item.icon size={16} />
-                    {item.label}
-                  </Link>
-                );
-              })}
-
-              {isAdmin && (
-                <div className="mt-4 space-y-1 border-t border-[var(--border)] pt-4">
-                  <p className="px-3 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                    Admin Dashboards
-                  </p>
-                  {[
-                    { role: "student", href: "/dashboard/student", label: "Student" },
-                    { role: "validator", href: "/dashboard/validator", label: "Validator" },
-                    { role: "non-validator", href: "/dashboard/non-validator", label: "General User" },
-                  ].map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        "student" === link.role
-                          ? "bg-mst-red/10 text-mst-red"
-                          : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
-                      }`}
-                    >
-                      <BookOpen size={16} />
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </nav>
-            <div className="mt-auto border-t border-[var(--border)] px-3 py-4">
-              <button
-                type="button"
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[var(--text)]">
+              {user.fullName}
+            </p>
+            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Phase {currentPhaseIndex}
+            </p>
+          </div>
+        </div>
+        {/* nav */}
+        <nav className="flex-1 space-y-1 px-3 py-4">
+          {[
+            { id: "overview", href: basePath, icon: LayoutDashboard, label: "Overview" },
+            { href: "/learn", icon: TreePine, label: "Learning Tree" },
+            { id: "assessments", href: `${basePath}#assessments`, icon: ClipboardCheck, label: "Assessments" },
+            { id: "progress", href: `${basePath}#progress`, icon: BarChart3, label: "Progress" },
+            ...(!isAdmin ? [{ id: "refer", href: `${basePath}#refer`, icon: Gift, label: "Refer & Earn" }] : []),
+            ...(isAdmin ? [
+              { href: "/admin/submissions", icon: BookOpen, label: "Submission Review" },
+              { href: "/admin/users", icon: Users, label: "User Management" },
+            ] : []),
+            { id: "profile", href: `${basePath}#profile`, icon: User, label: "Profile" },
+          ].map((item) => {
+            const isActive = item.id ? activeTab === item.id : false;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
                 onClick={() => {
-                  logout();
-                  router.push("/login");
+                  if (item.id) {
+                    setActiveTab(item.id);
+                  }
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${isActive
+                  ? "bg-mst-red/10 text-mst-red"
+                  : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                  }`}
               >
-                <LogOut size={16} />
-                Sign Out
-              </button>
+                <item.icon size={16} />
+                {item.label}
+              </Link>
+            );
+          })}
+
+          {isAdmin && (
+            <div className="mt-4 space-y-1 border-t border-[var(--border)] pt-4">
+              <p className="px-3 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                Admin Dashboards
+              </p>
+              {[
+                { role: "student", href: "/dashboard/student", label: "Student" },
+                { role: "validator", href: "/dashboard/validator", label: "Validator" },
+                { role: "non-validator", href: "/dashboard/non-validator", label: "General User" },
+              ].map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]`}
+                >
+                  <BookOpen size={16} />
+                  {link.label}
+                </Link>
+              ))}
             </div>
-        </aside>
+          )}
+        </nav>
+        <div className="mt-auto border-t border-[var(--border)] px-3 py-4">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+                await fetch(`${baseURL}/api/auth/logout`, {
+                  method: "POST",
+                  credentials: "include",
+                  headers: {
+                    "Content-Type": "application/json",
 
-        {/* Main Wrapper */}
-        <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* Ambient background isolated to main area */}
-          <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" aria-hidden />
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 50% 40% at 20% 10%, rgba(168,85,247,0.12), transparent 55%), radial-gradient(ellipse 45% 35% at 80% 80%, rgba(59,130,246,0.1), transparent 50%)",
+                  },
+                });
+              } catch (e) {
+                console.error(e);
+              }
+              logout();
+              window.location.href = '/login';
             }}
-            aria-hidden
-          />
-          
-          {/* Main */}
-          <main className="relative z-10 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <div className="mx-auto max-w-6xl">
-              {/* Mobile header */}
-              <div className="mb-4 flex items-center justify-between lg:hidden">
-                <p className="text-sm font-bold text-[var(--text)]">
-                  Command Center
-                </p>
-                <ThemeToggle />
-              </div>
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+          >
+            <LogOut size={16} />
+            Sign Out
+          </button>
+        </div>
+      </aside>
 
-              {activeTab === 'profile' ? (
-                <StudentProfile user={user} />
-              ) : activeTab === 'assessments' ? (
-                <PlaceholderTab 
-                  title="My Assessments" 
-                  icon={ClipboardCheck} 
-                  description="Complete modules on your Learning Roadmap to unlock assessments and certify your skills." 
-                />
-              ) : activeTab === 'progress' ? (
-                <PlaceholderTab 
-                  title="Learning Progress" 
-                  icon={BarChart3} 
-                  description="Track your course completion, activity heatmap, and performance analytics here as you learn." 
-                />
-              ) : (
-                <>
-                  {/* Hero */}
-                  <motion.section
+      {/* Main Wrapper */}
+      <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Ambient background isolated to main area */}
+        <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" aria-hidden />
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 50% 40% at 20% 10%, rgba(168,85,247,0.12), transparent 55%), radial-gradient(ellipse 45% 35% at 80% 80%, rgba(59,130,246,0.1), transparent 50%)",
+          }}
+          aria-hidden
+        />
+
+        {/* Main */}
+        <main className="relative z-10 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:py-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="mx-auto max-w-6xl">
+            {/* Mobile header */}
+            <div className="mb-4 flex items-center justify-between lg:hidden">
+              <p className="text-sm font-bold text-[var(--text)]">
+                Command Center
+              </p>
+              <ThemeToggle />
+            </div>
+
+            {activeTab === 'profile' ? (
+              <StudentProfile user={user} />
+            ) : activeTab === 'refer' ? (
+              <ReferAndEarnTab
+                referralCode={referralCode}
+                referralLink={referralLink}
+                referralRecords={referralRecords}
+                successfulReferrals={successfulReferrals}
+                withdrawUnlocked={withdrawUnlocked}
+              />
+            ) : activeTab === 'assessments' ? (
+              <PlaceholderTab
+                title="My Assessments"
+                icon={ClipboardCheck}
+                description="Complete modules on your Learning Roadmap to unlock assessments and certify your skills."
+              />
+            ) : activeTab === 'progress' ? (
+              <PlaceholderTab
+                title="Learning Progress"
+                icon={BarChart3}
+                description="Track your course completion, activity heatmap, and performance analytics here as you learn."
+              />
+            ) : (
+              <>
+                {/* Hero */}
+                <motion.section
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface)] to-[var(--surface)]/40 p-6 backdrop-blur-3xl sm:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.06)] transition-all duration-500 hover:shadow-[0_20px_80px_rgba(168,85,247,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
@@ -398,7 +427,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                         </div>
                       </div>
                       <div className="min-w-[150px]">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Course Progress</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">XP Progress</p>
                         <p className="mt-1 text-2xl font-black tracking-tight text-[var(--text)]">
                           {analytics.overallProgress}% <span className="text-sm font-bold text-[var(--text-muted)]">Complete</span>
                         </p>
@@ -439,8 +468,8 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                     { label: "Modules", value: `${analytics.modulesCompleted}/${analytics.totalModules}`, icon: BookOpen, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
                     { label: "Avg Score", value: analytics.averageScore > 0 ? `${analytics.averageScore}%` : "—", icon: Award, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
                     { label: "Study Time", value: `${analytics.totalStudyHours}h`, icon: Clock, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
-                    { label: "Focus", value: `${analytics.focusScore}%`, icon: Zap, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-                    { label: "Consistency", value: `${analytics.revisionConsistency}%`, icon: TrendingUp, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
+                    // { label: "Focus", value: `${analytics.focusScore}%`, icon: Zap, color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
+                    //{ label: "Consistency", value: `${analytics.revisionConsistency}%`, icon: TrendingUp, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
                     { label: "Coins", value: analytics.coinBalance, icon: Flame, color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
                     { label: "Percentile", value: `Top ${analytics.percentile}%`, icon: Trophy, color: "text-mst-red", bg: "bg-mst-red/10 border-mst-red/20" },
                   ].map((s, i) => (
@@ -496,7 +525,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                 </section>
 
                 {/* Charts row 1 */}
-                <section className="mt-8 grid gap-4 lg:grid-cols-2">
+                {/* <section className="mt-8 grid gap-4 lg:grid-cols-2">
                   <GlassCard>
                     <h3 className="text-sm font-black text-[var(--text)]">Your Learning Growth</h3>
                     <div className="mt-4 h-56">
@@ -525,7 +554,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                       </ResponsiveContainer>
                     </div>
                   </GlassCard>
-                </section>
+                </section> */}
 
                 {/* Charts row 2 */}
                 <section className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -602,11 +631,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                             background:
                               d.count === 0
                                 ? "var(--border)"
-                                : d.count === 1
-                                  ? "rgba(227,30,36,0.35)"
-                                  : d.count >= 3
-                                    ? "#e31e24"
-                                    : "rgba(227,30,36,0.65)",
+                                : "#e31e24",
                           }}
                         />
                       ))}
@@ -631,7 +656,7 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                 </section>
 
                 {/* AI Insights */}
-                <section className="mt-8">
+                {/* <section className="mt-8">
                   <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-[var(--text)]">
                     <Brain className="h-5 w-5 text-purple-400" />
                     AI Improvement Insights
@@ -657,10 +682,10 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                       </p>
                     </GlassCard>
                   </div>
-                </section>
+                </section> */}
 
                 {/* Learning health */}
-                <section className="mt-8">
+                {/* <section className="mt-8">
                   <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-[var(--text)]">
                     <Shield className="h-5 w-5 text-blue-400" />
                     Learning Health
@@ -675,20 +700,17 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                       <Gauge value={analytics.health.confidence} label="Confidence" color="#e31e24" />
                     </div>
                   </GlassCard>
-                </section>
+                </section> */}
 
                 {/* Next actions */}
                 <section className="mt-8">
                   <h2 className="mb-4 text-lg font-black text-[var(--text)]">What To Do Next</h2>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     {analytics.nextActions.map((action) => (
                       <Link
                         key={action.label}
                         href={action.href}
-                        className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-5 py-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_30px_rgba(227,30,36,0.2)] ${action.priority === "high"
-                          ? "border-mst-red/40 bg-gradient-to-r from-mst-red/10 to-orange-500/5"
-                          : "border-[var(--border)] bg-[var(--surface)]/70 hover:border-mst-red/40"
-                          }`}
+                        className="group relative flex items-center justify-between overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]/70 px-5 py-4 transition-all duration-300 hover:-translate-y-1 hover:border-mst-red/40 hover:bg-mst-red/5 hover:shadow-[0_10px_30px_rgba(227,30,36,0.1)]"
                       >
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-mst-red/0 via-mst-red/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                         <div className="relative z-10 flex items-center gap-3">
@@ -766,11 +788,11 @@ export function StudentCommandCenter({ curriculum }: { curriculum: Curriculum })
                     Continue on Learning Roadmap
                   </Link>
                 </div>
-                </>
-              )}
-            </div>
-          </main>
-        </div>
+              </>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

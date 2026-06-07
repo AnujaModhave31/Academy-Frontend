@@ -19,6 +19,7 @@ import {
   BookOpen,
   User,
   Gift,
+  Users,
 } from "lucide-react";
 
 const DASHBOARD_LINKS: { role: UserRole; href: string; label: string }[] = [
@@ -27,11 +28,20 @@ const DASHBOARD_LINKS: { role: UserRole; href: string; label: string }[] = [
   { role: "non-validator", href: "/dashboard/non-validator", label: "General User" },
 ];
 
-const getSidebarNav = (role: string) => [
+const getSidebarNav = (role: string, isAdmin: boolean) => [
   { href: `/dashboard/${role}`, icon: LayoutDashboard, label: "Overview" },
   { href: "/learn", icon: TreePine, label: "Learning Tree" },
   { href: `/dashboard/${role}#assessments`, icon: ClipboardCheck, label: "Assessments" },
   { href: `/dashboard/${role}#progress`, icon: BarChart3, label: "Progress" },
+  ...(isAdmin
+    ? [
+      { href: "/admin/submissions", icon: BookOpen, label: "Submission Review" },
+      { href: "/admin/users", icon: Users, label: "User Management" },
+    ]
+    : []),
+  ...(!isAdmin && role !== "admin"
+    ? [{ href: `#refer`, icon: Gift, label: "Refer & Earn" }]
+    : []),
   { href: `#profile`, icon: User, label: "Profile" },
 ];
 
@@ -97,12 +107,12 @@ export function DashboardShell({
 
         {/* nav */}
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {getSidebarNav(role).map((item) => {
+          {getSidebarNav(role, isAdmin).map((item) => {
             const Icon = item.icon;
-            
+
             const itemHash = item.href.includes('#') ? item.href.substring(item.href.indexOf('#')) : "";
             const itemPath = item.href.includes('#') ? item.href.substring(0, item.href.indexOf('#')) || pathname : item.href;
-            
+
             const isPathMatch = itemPath === pathname;
             const isHashMatch = itemHash === activeHash;
             const isActive = isPathMatch && isHashMatch;
@@ -119,11 +129,10 @@ export function DashboardShell({
                     }, 50);
                   }
                 }}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-mst-red/10 text-mst-red"
-                    : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
-                }`}
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${isActive
+                  ? "bg-mst-red/10 text-mst-red"
+                  : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                  }`}
               >
                 <Icon size={16} />
                 {item.label}
@@ -140,11 +149,10 @@ export function DashboardShell({
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    role === link.role
-                      ? "bg-mst-red/10 text-mst-red"
-                      : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
-                  }`}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${role === link.role
+                    ? "bg-mst-red/10 text-mst-red"
+                    : "text-[var(--text-muted)] hover:bg-[var(--border)]/40 hover:text-[var(--text)]"
+                    }`}
                 >
                   <BookOpen size={16} />
                   {link.label}
@@ -158,7 +166,23 @@ export function DashboardShell({
         <div className="mt-auto border-t border-[var(--border)] px-3 py-4">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              try {
+                let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+                //const token = "accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTA4MWI4MTM2YjI4NzJmYzk5NjdjMjYiLCJlbWFpbCI6ImFkaXR5YTExMkBnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4MDEzMTc1MywiZXhwIjoxNzgwNzM2NTUzfQ.hhPiWUrifjyEOoo_3y5ar9LWxjOVBIK9j7daTDjlELc; Path=/; HttpOnly; Expires=Sat, 06 Jun 2026 09:02:31 GMT";
+                await fetch(`${baseURL}/api/auth/logout`, {
+                  method: "POST",
+                  credentials: "include",
+                  headers: {
+                    //"Cookie": token,
+                    // "Authorization" : `Bearer ${token}`,
+                    "Content-Type": "application/json",
+
+                  },
+                });
+              } catch (e) {
+                console.error(e);
+              }
               logout();
               router.push("/login");
             }}
@@ -168,10 +192,10 @@ export function DashboardShell({
             Sign Out
           </button>
         </div>
-      </aside>
+      </aside >
 
       {/* ---- main content ---- */}
-      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      < div className="relative flex min-w-0 flex-1 flex-col overflow-hidden" >
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
             {/* mobile header */}
@@ -188,7 +212,21 @@ export function DashboardShell({
                 <ThemeToggle />
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    try {
+                      let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+                      const token = "accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTA4MWI4MTM2YjI4NzJmYzk5NjdjMjYiLCJlbWFpbCI6ImFkaXR5YTExMkBnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4MDEzMTc1MywiZXhwIjoxNzgwNzM2NTUzfQ.hhPiWUrifjyEOoo_3y5ar9LWxjOVBIK9j7daTDjlELc; Path=/; HttpOnly; Expires=Sat, 06 Jun 2026 09:02:31 GMT";
+                      await fetch(`${baseURL}/api/auth/logout`, {
+                        method: "POST",
+                        headers: {
+                          "Cookie": token,
+                          // "Authorization" : `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                      });
+                    } catch (e) {
+                      console.error(e);
+                    }
                     logout();
                     router.push("/login");
                   }}
@@ -224,11 +262,10 @@ export function DashboardShell({
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      role === link.role
-                        ? "bg-mst-red text-white"
-                        : "border border-[var(--border)] text-[var(--text)] hover:border-mst-red"
-                    }`}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${role === link.role
+                      ? "bg-mst-red text-white"
+                      : "border border-[var(--border)] text-[var(--text)] hover:border-mst-red"
+                      }`}
                   >
                     {link.label}
                   </Link>
@@ -240,7 +277,7 @@ export function DashboardShell({
             <div className="space-y-6">{children}</div>
           </div>
         </main>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

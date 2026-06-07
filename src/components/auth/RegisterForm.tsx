@@ -9,6 +9,7 @@ import {
   registerNonValidator,
   registerStudent,
   registerValidator,
+  registerWorkingProfessional,
   dashboardPath,
 } from "@/lib/auth";
 import {
@@ -28,6 +29,7 @@ import {
   SubmitButton,
   TextInput,
 } from "./AuthShell";
+import { Eye, EyeOff } from "lucide-react";
 
 type PlanId = "student" | "validator" | "normal" | "courseOnly";
 
@@ -38,35 +40,35 @@ const PLAN_OPTIONS: {
   price: number;
   desc: string;
 }[] = [
-  {
-    id: "validator",
-    label: "Validator Fellowship",
-    emoji: "🔐",
-    price: DEMO_FEES.validator,
-    desc: "Validator portal + 1 fraction + 19 years daily MSTC rewards.",
-  },
-  {
-    id: "student",
-    label: "Student Fellowship",
-    emoji: "🎓",
-    price: DEMO_FEES.student,
-    desc: "Student ID scholarship + paid internship + 1 fraction rewards.",
-  },
-  {
-    id: "normal",
-    label: "Working Professional Fellowship",
-    emoji: "👤",
-    price: DEMO_FEES.normal,
-    desc: "Paid internship + 1 fraction + industry mentor support.",
-  },
-  {
-    id: "courseOnly",
-    label: "Course Only",
-    emoji: "📚",
-    price: DEMO_FEES.courseOnly,
-    desc: "Course only at foundation offer. No fraction. No internship.",
-  },
-];
+    {
+      id: "validator",
+      label: "Validator Fellowship",
+      emoji: "🔐",
+      price: DEMO_FEES.validator,
+      desc: "Validator portal + 1 fraction + 19 years daily MSTC rewards.",
+    },
+    {
+      id: "student",
+      label: "Student Fellowship",
+      emoji: "🎓",
+      price: DEMO_FEES.student,
+      desc: "Student ID scholarship + paid internship + 1 fraction rewards.",
+    },
+    {
+      id: "normal",
+      label: "Working Professional Fellowship",
+      emoji: "👤",
+      price: DEMO_FEES.normal,
+      desc: "Paid internship + 1 fraction + industry mentor support.",
+    },
+    {
+      id: "courseOnly",
+      label: "Course Only",
+      emoji: "📚",
+      price: DEMO_FEES.courseOnly,
+      desc: "Course only at foundation offer. No fraction. No internship.",
+    },
+  ];
 
 const VALIDATOR_ID_PLACEHOLDER_URL = "https://example.com/validator-id-card.pdf";
 
@@ -126,6 +128,9 @@ export function RegisterForm() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referralCodeInput, setReferralCodeInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
@@ -140,9 +145,14 @@ export function RegisterForm() {
 
   useEffect(() => {
     const raw = searchParams.get("plan");
-    if (!raw) return;
-    const normalized = raw.trim() as PlanId;
-    if (PLAN_OPTIONS.some((p) => p.id === normalized)) setPlan(normalized);
+    if (raw) {
+      const normalized = raw.trim() as PlanId;
+      if (PLAN_OPTIONS.some((p) => p.id === normalized)) setPlan(normalized);
+    }
+    const ref = searchParams.get("ref");
+    if (ref) {
+      setReferralCodeInput(ref);
+    }
   }, [searchParams]);
 
   function handleSendOtp() {
@@ -169,7 +179,7 @@ export function RegisterForm() {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -186,6 +196,8 @@ export function RegisterForm() {
       return;
     }
 
+    const referralCode = referralCodeInput.trim() || undefined;
+
     let result:
       | { ok: true; user: { role: string } }
       | { ok: false; error: string };
@@ -197,12 +209,13 @@ export function RegisterForm() {
         return;
       }
 
-      result = registerValidator({
+      result = await registerValidator({
         fullName,
         email,
         phone,
         password,
-        idCardFileName: validatorIdFile.name,
+        idCardFile: validatorIdFile,
+        referralCode,
       });
     } else if (plan === "student") {
       if (!studentIdFile) {
@@ -216,22 +229,30 @@ export function RegisterForm() {
         return;
       }
 
-      result = registerStudent({
+      result = await registerStudent({
         fullName,
         email,
         phone,
         password,
         college: college === "Other" ? collegeOther : college,
-        collegeOther: college === "Other" ? collegeOther : undefined,
-        idCardFileName: studentIdFile.name,
+        idCardFile: studentIdFile,
+        referralCode,
       });
-    } else {
-      // normal + course-only both map to non-validator role in this demo
-      result = registerNonValidator({
+    } else if (plan === "normal") {
+      result = await registerWorkingProfessional({
         fullName,
         email,
         phone,
         password,
+        referralCode,
+      });
+    } else {
+      result = await registerNonValidator({
+        fullName,
+        email,
+        phone,
+        password,
+        referralCode,
       });
     }
 
@@ -367,17 +388,15 @@ export function RegisterForm() {
                   setPlan(p.id);
                   setError("");
                 }}
-                className={`relative flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-3 text-center transition-all ${
-                  plan === p.id
-                    ? "border-mst-red bg-mst-red/5 shadow-md shadow-mst-red/10"
-                    : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--text-muted)]/40"
-                }`}
+                className={`relative flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-3 text-center transition-all ${plan === p.id
+                  ? "border-mst-red bg-mst-red/5 shadow-md shadow-mst-red/10"
+                  : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--text-muted)]/40"
+                  }`}
               >
                 <span className="text-xl">{p.emoji}</span>
                 <span
-                  className={`text-[10px] font-bold uppercase tracking-wider ${
-                    plan === p.id ? "text-mst-red" : "text-[var(--text)]"
-                  }`}
+                  className={`text-[10px] font-bold uppercase tracking-wider ${plan === p.id ? "text-mst-red" : "text-[var(--text)]"
+                    }`}
                 >
                   {p.id === "courseOnly" ? "Course Only" : p.label.split(" ")[0]}
                 </span>
@@ -399,101 +418,115 @@ export function RegisterForm() {
         </div>
 
         <div>
-        {/* Plan-specific fields */}
-        {plan === "student" && (
-          <>
-            <div>
-              <FieldLabel htmlFor="college" required>
-                College
-              </FieldLabel>
-              <SelectInput
-                id="college"
-                value={college}
-                onChange={(e) => setCollege(e.target.value)}
-              >
-                {COLLEGES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </SelectInput>
-            </div>
-
-            {college === "Other" && (
+          {/* Plan-specific fields */}
+          {plan === "student" && (
+            <>
               <div>
-                <FieldLabel htmlFor="collegeOther" required>
-                  Enter College Name
+                <FieldLabel htmlFor="college" required>
+                  College
+                </FieldLabel>
+                <SelectInput
+                  id="college"
+                  value={college}
+                  onChange={(e) => setCollege(e.target.value)}
+                >
+                  {COLLEGES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </SelectInput>
+              </div>
+
+              {college === "Other" && (
+                <div>
+                  <FieldLabel htmlFor="collegeOther" required>
+                    Enter College Name
+                  </FieldLabel>
+                  <TextInput
+                    id="collegeOther"
+                    required
+                    value={collegeOther}
+                    onChange={(e) => setCollegeOther(e.target.value)}
+                    placeholder="Your college name"
+                  />
+                </div>
+              )}
+
+              <div>
+                <FieldLabel htmlFor="studentId" required>
+                  Student ID Card Upload
                 </FieldLabel>
                 <TextInput
-                  id="collegeOther"
+                  id="studentId"
+                  type="file"
+                  accept="image/*,.pdf"
                   required
-                  value={collegeOther}
-                  onChange={(e) => setCollegeOther(e.target.value)}
-                  placeholder="Your college name"
+                  onChange={(e) =>
+                    setStudentIdFile(e.target.files?.[0] ?? null)
+                  }
                 />
+                {studentIdFile && (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Selected: {studentIdFile.name}
+                  </p>
+                )}
               </div>
-            )}
+            </>
+          )}
 
-            <div>
-              <FieldLabel htmlFor="studentId" required>
-                Student ID Card Upload
-              </FieldLabel>
-              <TextInput
-                id="studentId"
-                type="file"
-                accept="image/*,.pdf"
-                required
-                onChange={(e) =>
-                  setStudentIdFile(e.target.files?.[0] ?? null)
-                }
-              />
-              {studentIdFile && (
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Selected: {studentIdFile.name}
-                </p>
-              )}
-            </div>
-          </>
-        )}
+          {plan === "validator" && (
+            <>
+              <div>
+                <FieldLabel htmlFor="validatorId" required>
+                  Validator ID Card Upload
+                </FieldLabel>
+                <TextInput
+                  id="validatorId"
+                  type="file"
+                  accept="image/*,.pdf"
+                  required
+                  onChange={(e) =>
+                    setValidatorIdFile(e.target.files?.[0] ?? null)
+                  }
+                />
+                {validatorIdFile && (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Selected: {validatorIdFile.name}
+                  </p>
+                )}
+              </div>
 
-        {plan === "validator" && (
-          <>
-            <div>
-              <FieldLabel htmlFor="validatorId" required>
-                Validator ID Card Upload
-              </FieldLabel>
-              <TextInput
-                id="validatorId"
-                type="file"
-                accept="image/*,.pdf"
-                required
-                onChange={(e) =>
-                  setValidatorIdFile(e.target.files?.[0] ?? null)
-                }
-              />
-              {validatorIdFile && (
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Selected: {validatorIdFile.name}
-                </p>
-              )}
-            </div>
+              <p className="text-sm text-[var(--text-muted)]">
+                Don&apos;t have a Validator ID Card?{" "}
+                <a
+                  href={VALIDATOR_ID_PLACEHOLDER_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-mst-red hover:underline"
+                >
+                  Download Validator ID Card
+                </a>
+              </p>
+            </>
+          )}
 
-            <p className="text-sm text-[var(--text-muted)]">
-              Don&apos;t have a Validator ID Card?{" "}
-              <a
-                href={VALIDATOR_ID_PLACEHOLDER_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-mst-red hover:underline"
-              >
-                Download Validator ID Card
-              </a>
-            </p>
-          </>
-        )}
+          {/* Fee display */}
+          <DemoFee amount={selectedPlan.price} />
+        </div>
 
-        {/* Fee display */}
-        <DemoFee amount={selectedPlan.price} />
+        {/* Referral Code */}
+        <div>
+          <FieldLabel htmlFor="referralCode">Referral Code</FieldLabel>
+          <TextInput
+            id="referralCode"
+            value={referralCodeInput}
+            onChange={(e) => setReferralCodeInput(e.target.value)}
+            placeholder="Enter referral code (optional)"
+          />
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Leave this empty if you do not have a referral code.
+          </p>
         </div>
 
         {/* Password */}
@@ -501,30 +534,50 @@ export function RegisterForm() {
           <FieldLabel htmlFor="password" required>
             Password
           </FieldLabel>
-          <TextInput
-            id="password"
-            type="password"
-            required
-            minLength={6}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="relative">
+            <TextInput
+              id="password"
+              type={showPassword ? "text" : "password"}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </div>
 
         <div>
           <FieldLabel htmlFor="confirmPassword" required>
             Confirm Password
           </FieldLabel>
-          <TextInput
-            id="confirmPassword"
-            type="password"
-            required
-            minLength={6}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
+          <div className="relative">
+            <TextInput
+              id="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            >
+              {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </div>
 
         {error && (

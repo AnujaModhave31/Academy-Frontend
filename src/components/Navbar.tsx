@@ -26,9 +26,7 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const dashboardHref = user
-    ? isAdmin
-      ? "/dashboard/student"
-      : dashboardPath(user.role)
+    ? (dashboardPath(user.role) || "/dashboard/non-validator")
     : "/login";
 
   return (
@@ -100,7 +98,22 @@ export function Navbar() {
               </Link>
               <button
                 type="button"
-                onClick={logout}
+                onClick={async () => {
+                  try {
+                    let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+                    await fetch(`${baseURL}/api/auth/logout`, {
+                      method: "POST",
+                      credentials: "include",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                    });
+                  } catch (e) {
+                    console.error(e);
+                  }
+                  await logout();
+                  window.location.href = '/login';
+                }}
                 className="rounded-lg border border-white/10 p-2 text-[var(--nav-text)]/60 transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
                 title="Sign Out"
               >
@@ -205,8 +218,20 @@ export function Navbar() {
                 </Link>
                 <button
                   type="button"
-                  onClick={() => {
-                    logout();
+                  onClick={async () => {
+                    try {
+                      let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+                      await fetch(`${baseURL}/api/auth/logout`, {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                      });
+                    } catch (e) {
+                      console.error(e);
+                    }
+                    await logout();
                     setMobileOpen(false);
                   }}
                   className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-400 transition hover:bg-red-500/10"

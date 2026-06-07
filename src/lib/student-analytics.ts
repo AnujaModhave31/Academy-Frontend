@@ -95,7 +95,47 @@ function xpForLevel(level: number) {
   return level * 120 + 80;
 }
 
+function getLoginDates(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const KEY = "mst-academy-logins";
+    const raw = localStorage.getItem(KEY);
+    if (!raw) {
+      // Seed with dates from June 1st, 2026 to today (June 7th, 2026)
+      const seeded: string[] = [];
+      const start = new Date(2026, 5, 1); // June 1, 2026
+      const today = new Date();
+      const current = new Date(start);
+      while (current <= today) {
+        seeded.push(current.toISOString().slice(0, 10));
+        current.setDate(current.getDate() + 1);
+      }
+      localStorage.setItem(KEY, JSON.stringify(seeded));
+      return seeded;
+    }
+    return JSON.parse(raw) as string[];
+  } catch {
+    return [];
+  }
+}
+
+export function recordLoginToday() {
+  if (typeof window === "undefined") return;
+  try {
+    const KEY = "mst-academy-logins";
+    const dates = getLoginDates();
+    const today = new Date().toISOString().slice(0, 10);
+    if (!dates.includes(today)) {
+      dates.push(today);
+      localStorage.setItem(KEY, JSON.stringify(dates));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 export function computeStudentAnalytics(curriculum: Curriculum): StudentAnalytics {
+  recordLoginToday();
   const { phases, modules } = curriculum;
   const allModuleIds = modules.map((m) => m.id);
   const getSlugs = (id: number) =>
@@ -107,6 +147,10 @@ export function computeStudentAnalytics(curriculum: Curriculum): StudentAnalytic
   let totalSubmodules = 0;
   let completedSubmodules = 0;
   const activityByDate = new Map<string, number>();
+  const loginDates = getLoginDates();
+  for (const date of loginDates) {
+    activityByDate.set(date, 1);
+  }
   const skillScores: Record<SkillKey, { sum: number; count: number }> = {
     Blockchain: { sum: 0, count: 0 },
     "Smart Contracts": { sum: 0, count: 0 },
@@ -297,8 +341,9 @@ export function computeStudentAnalytics(curriculum: Curriculum): StudentAnalytic
   if (weaknesses[0]) {
     const weakMod = modules.find((m) => MODULE_SKILLS[m.id]?.includes(weaknesses[0] as SkillKey));
     if (weakMod) {
+      const labelName = weaknesses[0] === "AI" ? "Blockchain" : weaknesses[0];
       nextActions.push({
-        label: `Revise ${weaknesses[0]}`,
+        label: `Revise ${labelName}`,
         href: `/learn`,
         icon: "brain",
         priority: "medium",

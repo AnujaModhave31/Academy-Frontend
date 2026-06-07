@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Link from "next/link";
 import { Typewriter } from "@/components/marketing/Typewriter";
@@ -114,7 +114,80 @@ export function LandingPage({
   submoduleCount,
 }: LandingPageProps) {
   const statsRef = useInView(0.25);
+  const [localPhases, setLocalPhases] = useState<any[]>(phases);
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null);
+  const [expandedPhaseDetails, setExpandedPhaseDetails] = useState<any>(null);
+  const [isLoadingPhase, setIsLoadingPhase] = useState(false);
+  const [courseDetails, setCourseDetails] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchCoursePhases = async () => {
+      try {
+        let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+        const courseId = "6a1a8a4b72fa89699a4f016a";
+        //const token = "accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTFkMzJmZWYwOWIxMzYzYTI3NGM1NzYiLCJlbWFpbCI6ImFkbWluNEBnbWFpbC5jb20iLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA1NTgxNzcsImV4cCI6MTc4MTE2Mjk3N30.k5ZoO1kSV-qGJ8NvpuloYQ9UaZMiMfoaZUFepb-0Neo";
+        const response = await fetch(`${baseURL}/api/phases/course/${courseId}`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "Content-Type": "application/json",
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setLocalPhases(data.data.sort((a: any, b: any) => a.index - b.index));
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching course phases:", error);
+      }
+    };
+
+    const fetchCourseDetails = async () => {
+      try {
+        let baseURL = process.env.NEXT_PUBLIC_BASE_URL;
+        const courseId = "6a1a8a4b72fa89699a4f016a";
+        const response = await fetch(`${baseURL}/api/courses/${courseId}`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "Content-Type": "application/json",
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const normalizedCourse = data?.course ?? data?.data ?? data;
+
+          if (normalizedCourse) {
+            setCourseDetails(normalizedCourse);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching course details:", error);
+      }
+    };
+
+    fetchCoursePhases();
+    fetchCourseDetails();
+  }, []);
+
+  const handlePhaseClick = async (index: number, phaseId: string) => {
+    if (expandedPhase === index) {
+      setExpandedPhase(null);
+      setExpandedPhaseDetails(null);
+      return;
+    }
+    setExpandedPhase(index);
+    setExpandedPhaseDetails(null);
+    setIsLoadingPhase(false);
+  };
 
   return (
     <div className="overflow-hidden bg-[var(--bg)]">
@@ -131,7 +204,7 @@ export function LandingPage({
 
             <div className="mt-4 sm:mt-6 min-h-[110px] sm:min-h-[130px] flex flex-col justify-center">
               <h1 className="animate-slide-up font-black text-[var(--text)] text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.1]">
-                Master Blockchain
+                {courseDetails?.title || "Master Blockchain"}
                 <span className="block mt-1 sm:mt-2">
                   <Typewriter
                     strings={[
@@ -149,9 +222,7 @@ export function LandingPage({
             </div>
 
             <p className="animate-slide-up stagger-2 mx-auto mt-4 max-w-2xl text-base leading-relaxed text-[var(--text-muted)] sm:text-xl sm:leading-relaxed">
-              A structured, college-integrated programme - interactive lessons,
-              live code, rigorous assessments, and a path from cryptography to
-              funded founder.
+              {courseDetails?.description || "A structured, college-integrated programme - interactive lessons, live code, rigorous assessments, and a path from cryptography to funded founder."}
             </p>
 
             <div className="animate-slide-up stagger-3 mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-4">
@@ -173,7 +244,7 @@ export function LandingPage({
                 { v: "4", l: "Phases" },
                 { v: String(moduleCount), l: "Modules" },
                 { v: `${submoduleCount}+`, l: "Lessons" },
-                { v: "130+", l: "Hours" },
+                { v: courseDetails?.estimatedDuration ? courseDetails.estimatedDuration.split(' ')[0] : "130+", l: courseDetails?.estimatedDuration ? (courseDetails.estimatedDuration.split(' ')[1] || "Duration") : "Hours" },
               ].map((pill) => (
                 <span
                   key={pill.l}
@@ -196,15 +267,17 @@ export function LandingPage({
             <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)]/50 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
               <div className="absolute inset-x-12 top-[4.5rem] hidden h-1 rounded-full bg-gradient-to-r from-[var(--accent-blue)] via-mst-red to-[var(--accent-green)] sm:block" />
               <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-                {phases.map((phase, i) => {
+                {localPhases.map((phase: any, i) => {
                   const Icon = PHASE_ICONS[i] ?? Blocks;
                   const color = PHASE_COLORS[i];
-                  const hours = PHASE_HOURS[phase.id]?.hours;
+                  const phaseId = phase._id || phase.id;
+                  const hours = phase.estimatedTime ?? PHASE_HOURS[phaseId]?.hours;
+                  const moduleCount = phase.moduleCount ?? phase.modules?.length ?? 0;
                   return (
                     <div
-                      key={phase.id}
+                      key={phaseId}
                       className="group relative flex flex-col items-center text-center cursor-pointer"
-                      onClick={() => setExpandedPhase(expandedPhase === i ? null : i)}
+                      onClick={() => handlePhaseClick(i, phaseId)}
                     >
                       <div
                         className="icon-pulse-glow relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl border-2 bg-[var(--bg)] shadow-xl transition-transform duration-300 group-hover:scale-110 sm:h-20 sm:w-20"
@@ -219,8 +292,8 @@ export function LandingPage({
                         Phase {i + 1}
                       </p>
                       <p className="mt-1 text-xs font-medium text-[var(--text-muted)] sm:text-sm">
-                        {phase.modules.length} modules
-                        {hours ? ` · ~${hours}h` : ""}
+                        {moduleCount} modules
+                        {hours ? ` · ~${hours}` : ""}
                       </p>
                     </div>
                   );
@@ -235,12 +308,20 @@ export function LandingPage({
                 <div className="overflow-hidden">
                   <div className="mx-auto max-w-2xl pt-4">
                     {expandedPhase !== null && (() => {
-                      const phase = phases[expandedPhase];
+                      const phase: any = localPhases[expandedPhase];
+                      const details = expandedPhaseDetails || phase;
                       const Icon = PHASE_ICONS[expandedPhase] ?? Blocks;
                       const color = PHASE_COLORS[expandedPhase];
-                      const hours = PHASE_HOURS[phase.id]?.hours;
+                      const phaseId = phase._id || phase.id;
+                      const hours = details.estimatedTime ?? PHASE_HOURS[phaseId]?.hours;
+                      const moduleCount = details.moduleCount ?? details.modules?.length ?? 0;
                       return (
                         <div className="group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 transition-all duration-500 hover:-translate-y-2 hover:border-mst-red/40 hover:shadow-2xl sm:p-10">
+                          {isLoadingPhase && (
+                            <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--surface)]/50 backdrop-blur-sm">
+                              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--border)] border-t-mst-red" />
+                            </div>
+                          )}
                           <div
                             className="absolute -right-8 -top-8 h-40 w-40 rounded-full opacity-20 blur-3xl transition duration-500 group-hover:opacity-50"
                             style={{ backgroundColor: color }}
@@ -251,7 +332,7 @@ export function LandingPage({
                           >
                             {expandedPhase + 1}
                           </div>
-                          <div className="relative">
+                          <div className="relative z-10">
                             <div
                               className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
                               style={{ backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)` }}
@@ -266,13 +347,18 @@ export function LandingPage({
                                 Phase {expandedPhase + 1}
                               </span>
                               <span className="text-sm text-[var(--text-muted)]">
-                                · {phase.modules.length} modules
-                                {hours ? ` · ~${hours} hrs` : ""}
+                                · {moduleCount} modules
+                                {hours ? ` · ~${hours}` : ""}
                               </span>
                             </div>
                             <h3 className="mt-3 text-2xl font-bold leading-snug text-[var(--text)]">
-                              {phase.title}
+                              {details.title}
                             </h3>
+                            {details.description && (
+                              <p className="mt-4 text-base text-[var(--text-muted)]">
+                                {details.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
@@ -320,59 +406,79 @@ export function LandingPage({
                 id: "validator",
                 detailHref: "/plans/validator",
                 title: "Validator Fellowship",
-                price: "Rs 9,999",
+                price: "Rs 14,999",
                 original: "Rs 14,999",
                 gradient: "bg-gradient-to-br from-mst-red/20 via-mst-red/5 to-transparent",
-                tag: "Validator portal + stakeholder access",
+                tag: "Validator dashboard + exclusive sessions",
                 bullets: [
-                  "Lifetime course access",
-                  "Dedicated validator portal",
-                  "1 fraction + daily MSTC rewards",
+                  "Validator dashboard",
+                  "Priority support",
+                  "Exclusive sessions",
                 ],
               },
               {
                 id: "student",
                 detailHref: "/plans/student",
                 title: "Student Fellowship",
-                price: "Rs 14,999",
-                original: "Rs 24,999",
+                price: "Rs 4,999",
+                original: "Rs 4,999",
                 gradient: "bg-gradient-to-br from-mst-red/20 via-mst-red/5 to-transparent",
-                tag: "Student ID scholarship",
+                tag: "Assignments + community support",
                 bullets: [
-                  "Lifetime course access",
-                  "Paid internship with real-world projects",
-                  "1 fraction + daily MSTC rewards",
+                  "Full course access",
+                  "Assignments",
+                  "Community support",
                 ],
               },
               {
                 id: "normal",
                 detailHref: "/plans/working-professional",
                 title: "Working Professional Fellowship",
-                price: "Rs 19,999",
-                original: "Rs 24,999",
+                price: "Rs 9,999",
+                original: "Rs 9,999",
                 gradient: "bg-gradient-to-br from-mst-red/20 via-mst-red/5 to-transparent",
-                tag: "Career transition focused",
+                tag: "Interview prep + 1:1 mentorship",
                 bullets: [
-                  "Lifetime course access",
-                  "Paid internship with industry mentors",
-                  "1 fraction + daily MSTC rewards",
+                  "Full course access",
+                  "Interview preparation",
+                  "1:1 mentorship",
                 ],
               },
               {
                 id: "courseOnly",
                 detailHref: "/plans/course-only",
                 title: "Course Only",
-                price: "Rs 4,999",
-                original: "Rs 9,999",
+                price: "Rs 2,999",
+                original: "Rs 2,999",
                 gradient: "bg-gradient-to-br from-mst-red/20 via-mst-red/5 to-transparent",
-                tag: "Foundation track offer",
+                tag: "Video access only",
                 bullets: [
-                  "Lifetime course access",
-                  "No fraction / no internship",
-                  "Guided curriculum + assessments",
+                  "Video access only",
                 ],
               },
-            ].map((card, i) => (
+            ].map((card, i) => {
+              let apiPrice = card.price;
+              let apiOriginal = card.original;
+              let apiBullets = card.bullets;
+
+              if (courseDetails?.pricingPlans && Array.isArray(courseDetails.pricingPlans)) {
+                let roleToMatch = "";
+                if (card.id === "validator") roleToMatch = "VALIDATOR";
+                else if (card.id === "student") roleToMatch = "STUDENT";
+                else if (card.id === "normal") roleToMatch = "WORKING_PROFESSIONAL";
+                else if (card.id === "courseOnly") roleToMatch = "COURSE_ONLY";
+
+                const apiPlan = courseDetails.pricingPlans.find((p: any) => p.role === roleToMatch);
+
+                if (apiPlan) {
+                  if (apiPlan.price !== undefined) apiPrice = `Rs ${apiPlan.price.toLocaleString('en-IN')}`;
+                  if (apiPlan.perks && Array.isArray(apiPlan.perks) && apiPlan.perks.length > 0) {
+                    apiBullets = apiPlan.perks;
+                  }
+                }
+              }
+
+              return (
               <RevealSection key={card.id} delay={i * 70} className="h-full">
                 <div
                   className={`relative flex flex-col h-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-7 shadow-sm transition-all duration-500 hover:-translate-y-2 hover:border-mst-red/30 hover:shadow-2xl`}
@@ -391,11 +497,11 @@ export function LandingPage({
                       <div className="mt-2 border-b border-[var(--border)] pb-4">
                         <div className="flex items-end justify-between">
                           <p className="text-xs font-semibold text-[var(--text-muted)] line-through">
-                            {card.original}
+                            {apiOriginal}
                           </p>
                           <div className="text-right">
                             <p className="text-2xl font-black text-gradient-red leading-none">
-                              {card.price}
+                              {apiPrice}
                             </p>
                             <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                               One-time enrollment
@@ -406,7 +512,7 @@ export function LandingPage({
                     </div>
 
                     <div className="mt-5 space-y-2 flex-1">
-                      {card.bullets.map((b) => (
+                      {apiBullets.map((b) => (
                         <div
                           key={b}
                           className="flex items-start gap-2 text-sm text-[var(--text-muted)]"
@@ -429,7 +535,8 @@ export function LandingPage({
                   </div>
                 </div>
               </RevealSection>
-            ))}
+            );
+          })}
           </div>
 
           {/* Leaderboard */}
@@ -514,7 +621,11 @@ export function LandingPage({
             { end: 4, suffix: "", label: "Phases" },
             { end: moduleCount, suffix: "", label: "Modules" },
             { end: submoduleCount, suffix: "+", label: "Submodules" },
-            { end: 130, suffix: "+", label: "Hours" },
+            { 
+              end: courseDetails?.estimatedDuration ? parseInt(courseDetails.estimatedDuration) || 130 : 130, 
+              suffix: courseDetails?.estimatedDuration && courseDetails.estimatedDuration.includes('+') ? "+" : (courseDetails?.estimatedDuration ? "" : "+"), 
+              label: courseDetails?.estimatedDuration ? courseDetails.estimatedDuration.replace(/^[0-9+\s]+/, '').trim() || "Duration" : "Hours" 
+            },
           ].map((stat, i) => (
             <div
               key={stat.label}
