@@ -14,7 +14,9 @@ export default async function AssessmentPage({
   const submodule = getSubmodule(moduleId, slug);
   if (!submodule) notFound();
 
+  // Load assessment directly from the local JSON file
   const assessment = getAssessment(moduleId, slug);
+
   if (!assessment) notFound();
 
   return (

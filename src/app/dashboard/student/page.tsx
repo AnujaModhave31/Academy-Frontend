@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useAuth } from "@/components/AuthProvider";
@@ -178,8 +180,25 @@ export default function StudentDashboardPage({
 
   const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({ "phase-1": true, "assess-phase-1": true });
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({ "1": true, "assess-1": true });
-  const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null);
-  const [newQuestion, setNewQuestion] = useState({ text: '', options: ['', '', '', ''], correctOption: 0 });
+
+  // Assessment integration states
+  const [editingAssessment, setEditingAssessment] = useState<any | null>(null);
+  const [loadingAssessment, setLoadingAssessment] = useState(false);
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState<number | null>(null);
+  const [questionForm, setQuestionForm] = useState<{
+    text: string;
+    options: string[];
+    correctOptionIndex: number;
+    marks: number;
+    type: string;
+    explanation: string;
+  } | null>(null);
+  const [customConfirm, setCustomConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   const [editingItem, setEditingItem] = useState<{
     type: string;
     title: string;
@@ -228,39 +247,427 @@ export default function StudentDashboardPage({
     setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleAddQuestion = (subId: string) => {
-    setAddingQuestionTo(subId);
-    setNewQuestion({ text: '', options: ['', '', '', ''], correctOption: 0 });
+  const handleOpenAssessment = async (submoduleId: string, submoduleTitle: string, openAddQuestionDirectly = false) => {
+    try {
+      setLoadingAssessment(true);
+      const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${baseURL}/api/assignments/admin/submodule/${submoduleId}`, {
+        method: "GET",
+        credentials: "include",
+        headers
+      });
+
+      let loadedAssessment: any = null;
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const raw = data[0];
+          const parsedQuestions = (raw.questions || []).map((q: any, qIdx: number) => {
+            const text = q.text || q.question_text || "";
+            const type = q.type || "mcq";
+            const marks = q.marks || 1;
+            const explanation = q.explanation || "";
+
+            let options: string[] = ["", "", "", ""];
+            let correctOptionIndex = 0;
+
+            if (Array.isArray(q.options)) {
+              q.options.forEach((opt: any, idx: number) => {
+                if (idx < 4) {
+                  if (typeof opt === "string") {
+                    const prefixPattern = /^[A-D]\.\s*/;
+                    options[idx] = opt.replace(prefixPattern, "");
+                  } else if (opt && typeof opt === "object") {
+                    options[idx] = opt.text || "";
+                    if (opt.isCorrect) {
+                      correctOptionIndex = idx;
+                    }
+                  }
+                }
+              });
+            }
+
+            const correctLetter = q.correctAnswer || q.correct_answer || "A";
+            const letterCode = correctLetter.charCodeAt(0) - 65;
+            if (letterCode >= 0 && letterCode < 4) {
+              correctOptionIndex = letterCode;
+            }
+
+            return {
+              id: q.id || q._id || `q-${qIdx}-${Date.now()}`,
+              number: qIdx,
+              type,
+              marks,
+              text,
+              options,
+              correctOptionIndex,
+              explanation
+            };
+          });
+
+          loadedAssessment = {
+            ...raw,
+            questions: parsedQuestions
+          };
+        }
+      }
+
+      if (!loadedAssessment) {
+        loadedAssessment = {
+          submoduleId,
+          setNumber: 1,
+          title: `${submoduleTitle} Assignment`,
+          estimatedTime: 30,
+          questions: []
+        };
+      }
+
+      setEditingAssessment({
+        ...loadedAssessment,
+        submoduleTitle
+      });
+
+      if (openAddQuestionDirectly) {
+        setQuestionForm({
+          text: "",
+          options: ["", "", "", ""],
+          correctOptionIndex: 0,
+          marks: 1,
+          type: "mcq",
+          explanation: ""
+        });
+        setActiveQuestionIndex(loadedAssessment.questions.length);
+      }
+    } catch (error) {
+      console.error("Error fetching assessment:", error);
+      setStatusMessage({
+        type: "error",
+        title: "Error Loading Assessment",
+        message: "Failed to fetch assessment from the server."
+      });
+    } finally {
+      setLoadingAssessment(false);
+    }
   };
 
-  const handleSaveQuestion = () => {
-    if (!newQuestion.text.trim()) {
-      alert("Please enter the question text.");
-      return;
+  const executeCreateAssessment = async (payload: any) => {
+    try {
+      const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${baseURL}/api/assignments`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        setStatusMessage({
+          type: "success",
+          title: "Assessment Created",
+          message: responseData.message || "Assessment saved successfully."
+        });
+        setEditingAssessment(null);
+        await fetchCurriculum();
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setStatusMessage({
+          type: "error",
+          title: "Save Failed",
+          message: errData.message || response.statusText || "Failed to create assessment"
+        });
+      }
+    } catch (error: any) {
+      console.error("Error creating assessment:", error);
+      setStatusMessage({
+        type: "error",
+        title: "Error Saving Assessment",
+        message: error.message || String(error)
+      });
     }
-    if (newQuestion.options.some(opt => !opt.trim())) {
-      alert("Please fill in all 4 options.");
+  };
+
+  const executeUpdateAssessment = async (assignmentId: string, payload: any) => {
+    try {
+      const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${baseURL}/api/assignments/${assignmentId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        setStatusMessage({
+          type: "success",
+          title: "Assessment Updated",
+          message: responseData.message || "Assessment saved successfully."
+        });
+        setEditingAssessment(null);
+        await fetchCurriculum();
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setStatusMessage({
+          type: "error",
+          title: "Save Failed",
+          message: errData.message || response.statusText || "Failed to update assessment"
+        });
+      }
+    } catch (error: any) {
+      console.error("Error updating assessment:", error);
+      setStatusMessage({
+        type: "error",
+        title: "Error Saving Assessment",
+        message: error.message || String(error)
+      });
+    }
+  };
+
+  const handleSaveAssessment = async () => {
+    if (!editingAssessment) return;
+    if (!editingAssessment.title.trim()) {
+      setStatusMessage({
+        type: "error",
+        title: "Validation Error",
+        message: "Please enter a title for the assessment."
+      });
       return;
     }
 
-    setPhases(phases.map((p: any) => ({
-      ...p,
-      modules: p.modules.map((m: any) => ({
-        ...m,
-        submodules: m.submodules.map((sub: any) => {
-          if (sub.id === addingQuestionTo) {
+    const payload = {
+      submoduleId: editingAssessment.submoduleId,
+      setNumber: editingAssessment.setNumber || 1,
+      title: editingAssessment.title,
+      estimatedTime: Number(editingAssessment.estimatedTime) || 30,
+      questions: editingAssessment.questions.map((q: any, idx: number) => {
+        const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
+        return {
+          id: q.id || `q-${idx + 1}`,
+          number: idx,
+          type: q.type || "mcq",
+          marks: Number(q.marks) || 1,
+          text: q.text || q.question_text || "",
+          options: q.options.map((optVal: string, optIdx: number) => {
+            const letter = String.fromCharCode(65 + optIdx);
             return {
-              ...sub,
-              questionsCount: (sub.questionsCount || 0) + 1,
-              hasAssessment: true
+              key: letter,
+              text: optVal,
+              isCorrect: q.correctOptionIndex === optIdx
             };
-          }
-          return sub;
-        })
-      }))
-    })));
+          }),
+          correctAnswer: correctLetter,
+          explanation: q.explanation || ""
+        };
+      })
+    };
 
-    setAddingQuestionTo(null);
+    if (editingAssessment._id) {
+      await executeUpdateAssessment(editingAssessment._id, payload);
+    } else {
+      await executeCreateAssessment(payload);
+    }
+  };
+
+  const executeDeleteAssignment = async (assignmentId: string) => {
+    try {
+      const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+      const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${baseURL}/api/assignments/${assignmentId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers
+      });
+
+      if (response.ok) {
+        setStatusMessage({
+          type: "success",
+          title: "Deleted Successfully",
+          message: "Assessment deleted successfully"
+        });
+        setEditingAssessment(null);
+        await fetchCurriculum();
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setStatusMessage({
+          type: "error",
+          title: "Delete Failed",
+          message: errData.message || response.statusText || "Failed to delete assessment"
+        });
+      }
+    } catch (error: any) {
+      console.error("Error deleting assessment:", error);
+      setStatusMessage({
+        type: "error",
+        title: "Error Occurred",
+        message: error.message || String(error)
+      });
+    }
+  };
+
+  const handleDeleteAssessment = async () => {
+    const id = editingAssessment?._id || editingAssessment?.id;
+    if (!editingAssessment || !id) {
+      setStatusMessage({
+        type: "error",
+        title: "Delete Cancelled",
+        message: "No assessment ID was found to delete."
+      });
+      return;
+    }
+
+    setCustomConfirm({
+      title: "Delete Assessment",
+      message: `Are you sure you want to delete the assessment "${editingAssessment.title}"?`,
+      onConfirm: async () => {
+        setCustomConfirm(null);
+        await executeDeleteAssignment(id);
+      }
+    });
+  };
+
+  const handleDeleteAssessmentFromList = async (submoduleId: string, submoduleTitle: string) => {
+    setCustomConfirm({
+      title: "Delete Assessment",
+      message: `Are you sure you want to delete the assessment for "${submoduleTitle}"?`,
+      onConfirm: async () => {
+        setCustomConfirm(null);
+        try {
+          setLoadingAssessment(true);
+          const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+          const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          }
+
+          const getRes = await fetch(`${baseURL}/api/assignments/admin/submodule/${submoduleId}`, {
+            method: "GET",
+            credentials: "include",
+            headers
+          });
+
+          if (getRes.ok) {
+            const data = await getRes.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const assignmentId = data[0]._id || data[0].id;
+              await executeDeleteAssignment(assignmentId);
+            } else {
+              setStatusMessage({
+                type: "error",
+                title: "Not Found",
+                message: "No assessment found to delete."
+              });
+            }
+          } else {
+            setStatusMessage({
+              type: "error",
+              title: "Fetch Failed",
+              message: "Failed to locate the assessment details."
+            });
+          }
+        } catch (error: any) {
+          console.error("Error deleting assessment:", error);
+          setStatusMessage({
+            type: "error",
+            title: "Error Occurred",
+            message: error.message || String(error)
+          });
+        } finally {
+          setLoadingAssessment(false);
+        }
+      }
+    });
+  };
+
+  const handleSaveQuestionForm = () => {
+    if (!questionForm) return;
+    if (!questionForm.text.trim()) {
+      setStatusMessage({
+        type: "error",
+        title: "Validation Error",
+        message: "Please enter question text."
+      });
+      return;
+    }
+    if (questionForm.options.some(opt => !opt.trim())) {
+      setStatusMessage({
+        type: "error",
+        title: "Validation Error",
+        message: "Please fill in all 4 options."
+      });
+      return;
+    }
+
+    const updatedQuestions = [...(editingAssessment?.questions || [])];
+    const newQ = {
+      id: updatedQuestions[activeQuestionIndex!]?.id || `q-${Date.now()}`,
+      number: activeQuestionIndex!,
+      type: questionForm.type || "mcq",
+      marks: Number(questionForm.marks) || 1,
+      text: questionForm.text,
+      options: [...questionForm.options],
+      correctOptionIndex: questionForm.correctOptionIndex,
+      explanation: questionForm.explanation
+    };
+
+    if (activeQuestionIndex! < updatedQuestions.length) {
+      updatedQuestions[activeQuestionIndex!] = newQ;
+    } else {
+      updatedQuestions.push(newQ);
+    }
+
+    setEditingAssessment({
+      ...editingAssessment,
+      questions: updatedQuestions
+    });
+
+    setQuestionForm(null);
+    setActiveQuestionIndex(null);
+  };
+
+  const handleDeleteQuestion = (indexToDelete: number) => {
+    setCustomConfirm({
+      title: "Delete Question",
+      message: "Are you sure you want to delete this question from the assessment?",
+      onConfirm: () => {
+        setCustomConfirm(null);
+        const updatedQuestions = editingAssessment.questions
+          .filter((_: any, idx: number) => idx !== indexToDelete)
+          .map((q: any, idx: number) => ({
+            ...q,
+            number: idx
+          }));
+
+        setEditingAssessment({
+          ...editingAssessment,
+          questions: updatedQuestions
+        });
+      }
+    });
   };
 
   const handleAddPhase = () => {
@@ -331,7 +738,7 @@ export default function StudentDashboardPage({
       }
 
       if (type === "create-phase") {
-        const courseId = "6a1a8a4b72fa89699a4f016a";
+        const courseId = "6a2934912b48a13769669f8e";
         const response = await fetch(`${baseURL}/api/phases/admin`, {
           method: "POST",
           credentials: "include",
@@ -941,18 +1348,25 @@ export default function StudentDashboardPage({
                                           </span>
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-2 self-end sm:self-auto opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
+                                      <div className="flex items-center gap-2 self-end sm:self-auto">
                                         <button
-                                          onClick={() => handleAddQuestion(sub.id)}
-                                          className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-[var(--text)] hover:border-mst-red/30 hover:bg-mst-red/10 hover:text-mst-red transition-all shadow-sm"
+                                          onClick={() => handleOpenAssessment(sub.id, sub.title, true)}
+                                          className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-black hover:border-mst-red/30 hover:bg-mst-red/10 hover:text-mst-red transition-all shadow-sm"
                                         >
                                           <Plus className="h-3.5 w-3.5" /> Add Question
                                         </button>
                                         <button
-                                          onClick={() => handleEdit("Assessment", sub.title, phase.id, mod.id, sub.id)}
-                                          className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-[var(--text)] hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-blue-500 transition-all shadow-sm"
+                                          onClick={() => handleOpenAssessment(sub.id, sub.title, false)}
+                                          className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-black hover:border-mst-red/30 hover:bg-mst-red/10 hover:text-mst-red transition-all shadow-sm"
                                         >
                                           <Edit2 className="h-3.5 w-3.5" /> Edit
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteAssessmentFromList(sub.id, sub.title)}
+                                          className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-black hover:border-mst-red/30 hover:bg-mst-red/10 hover:text-mst-red transition-all shadow-sm"
+                                          title="Delete Assessment"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" /> Delete
                                         </button>
                                       </div>
                                     </div>
@@ -990,48 +1404,282 @@ export default function StudentDashboardPage({
         </div>
       )}
 
-      {/* Add Question Modal */}
-      {addingQuestionTo && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--border)] p-6 bg-[var(--bg)]/50">
+      {/* Loading Assessment Indicator */}
+      {loadingAssessment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-2xl flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--border)] border-t-mst-red" />
+            <p className="text-sm font-bold text-[var(--text)]">Loading Assessment...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Assessment Editor Modal */}
+      {editingAssessment && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 overflow-y-auto">
+          <div className="w-full max-w-4xl my-8 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-6 bg-[var(--bg)]/50 shrink-0">
               <div>
-                <h3 className="text-xl font-black text-[var(--text)]">Add Assessment Question</h3>
-                <p className="text-sm text-[var(--text-muted)] mt-1">Create a new multiple-choice question for this sub-module.</p>
+                <span className="text-xs font-black uppercase text-mst-red tracking-wider">
+                  Assessment Management &bull; {editingAssessment.submoduleTitle}
+                </span>
+                <h3 className="text-xl font-black text-[var(--text)] mt-0.5">
+                  {editingAssessment._id ? "Edit Assessment" : "Create Assessment"}
+                </h3>
               </div>
               <button
-                onClick={() => setAddingQuestionTo(null)}
+                onClick={() => setEditingAssessment(null)}
                 className="rounded-full p-2 text-[var(--text-muted)] hover:bg-[var(--border)]/50 hover:text-[var(--text)] transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Assessment Meta Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-2xl bg-[var(--bg)]/30 border border-[var(--border)]/60">
+                <div className="md:col-span-2">
+                  <label className="mb-1.5 block text-xs font-bold text-[var(--text)]">Assessment Title</label>
+                  <input
+                    type="text"
+                    value={editingAssessment.title}
+                    onChange={e => setEditingAssessment({ ...editingAssessment, title: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-sm text-[var(--text)] focus:border-mst-red/50 focus:outline-none focus:ring-4 focus:ring-mst-red/10 transition-all"
+                    placeholder="e.g. Blockchain Basics Set 1"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-[var(--text)]">Estimated Time (mins)</label>
+                  <input
+                    type="number"
+                    value={editingAssessment.estimatedTime}
+                    onChange={e => setEditingAssessment({ ...editingAssessment, estimatedTime: Number(e.target.value) })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-sm text-[var(--text)] focus:border-mst-red/50 focus:outline-none focus:ring-4 focus:ring-mst-red/10 transition-all"
+                    placeholder="30"
+                  />
+                </div>
+              </div>
+
+              {/* Questions Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--border)]/60 pb-3">
+                  <h4 className="text-base font-black text-[var(--text)] flex items-center gap-2">
+                    Questions List
+                    <span className="rounded-full bg-mst-red/10 px-2.5 py-0.5 text-xs font-black text-mst-red">
+                      {editingAssessment.questions.length} Questions
+                    </span>
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setQuestionForm({
+                        text: "",
+                        options: ["", "", "", ""],
+                        correctOptionIndex: 0,
+                        marks: 1,
+                        type: "mcq",
+                        explanation: ""
+                      });
+                      setActiveQuestionIndex(editingAssessment.questions.length);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-mst-red to-red-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110 transition-all"
+                  >
+                    <Plus className="h-4 w-4" /> Add Question
+                  </button>
+                </div>
+
+                {editingAssessment.questions.length === 0 ? (
+                  <div className="text-center py-12 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)]/10">
+                    <p className="text-sm font-semibold text-[var(--text-muted)]">No questions added yet. Click "Add Question" to build your assessment.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {editingAssessment.questions.map((q: any, idx: number) => (
+                      <div key={q.id || idx} className="rounded-2xl border border-[var(--border)]/60 bg-[var(--surface)] p-5 hover:border-purple-500/30 transition-all relative group shadow-sm">
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-500/10 text-xs font-black text-purple-500">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-purple-500/80 bg-purple-500/5 px-2 py-0.5 rounded">
+                              {q.type || "mcq"}
+                            </span>
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">
+                              Marks: {q.marks || 1}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setQuestionForm({
+                                  text: q.text || "",
+                                  options: [...q.options],
+                                  correctOptionIndex: q.correctOptionIndex || 0,
+                                  marks: q.marks || 1,
+                                  type: q.type || "mcq",
+                                  explanation: q.explanation || ""
+                                });
+                                setActiveQuestionIndex(idx);
+                              }}
+                              className="p-1.5 text-[var(--text-muted)] hover:text-blue-500 rounded-lg hover:bg-blue-500/10 transition"
+                              title="Edit Question"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(idx)}
+                              className="p-1.5 text-[var(--text-muted)] hover:text-mst-red rounded-lg hover:bg-mst-red/10 transition"
+                              title="Delete Question"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-sm font-bold text-[var(--text)] mb-3 leading-relaxed">
+                          {q.text}
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          {q.options.map((optVal: any, optIdx: number) => {
+                            const isCorrect = q.correctOptionIndex === optIdx;
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`flex items-center gap-3 rounded-xl border p-2.5 pl-4 text-xs font-semibold ${isCorrect
+                                  ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-500 shadow-sm"
+                                  : "border-[var(--border)]/40 bg-[var(--bg)]/30 text-[var(--text-muted)]"
+                                  }`}
+                              >
+                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black uppercase ${isCorrect ? "bg-emerald-500 text-white" : "bg-[var(--border)] text-[var(--text-muted)]"
+                                  }`}>
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span className="truncate">{optVal}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {q.explanation && (
+                          <div className="mt-4 pt-3 border-t border-[var(--border)]/30 text-xs text-[var(--text-muted)]">
+                            <strong className="text-[var(--text)] font-bold">Explanation:</strong> {q.explanation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--border)] p-6 bg-[var(--bg)]/50 shrink-0">
               <div>
-                <label className="mb-2 block text-sm font-bold text-[var(--text)]">Question Text</label>
+                {editingAssessment._id && (
+                  <button
+                    onClick={handleDeleteAssessment}
+                    className="flex items-center gap-1.5 rounded-xl border border-mst-red/20 bg-mst-red/5 px-5 py-2.5 text-xs font-bold text-mst-red hover:bg-mst-red/10 transition-all"
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete Assessment
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setEditingAssessment(null)}
+                  className="rounded-xl px-5 py-2.5 text-sm font-bold text-[var(--text-muted)] hover:bg-[var(--border)]/50 hover:text-[var(--text)] transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveAssessment}
+                  className="flex items-center gap-2 rounded-xl bg-mst-red px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-mst-red/20 hover:brightness-110 transition-all"
+                >
+                  <Save className="h-4 w-4" /> Save Assessment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Question Sub-Modal */}
+      {questionForm !== null && activeQuestionIndex !== null && (
+        <div className="fixed inset-0 z-[105] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-5 bg-[var(--bg)]/50 shrink-0">
+              <div>
+                <h3 className="text-lg font-black text-[var(--text)]">
+                  {activeQuestionIndex < (editingAssessment?.questions?.length || 0)
+                    ? `Edit Question #${activeQuestionIndex + 1}`
+                    : "Add New Question"}
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">Define multiple-choice choices and correct answer.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setQuestionForm(null);
+                  setActiveQuestionIndex(null);
+                }}
+                className="rounded-full p-2 text-[var(--text-muted)] hover:bg-[var(--border)]/50 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-bold text-[var(--text)]">Type</label>
+                  <input
+                    type="text"
+                    value={questionForm.type}
+                    onChange={e => setQuestionForm({ ...questionForm, type: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)] focus:border-purple-500/50 focus:outline-none"
+                    placeholder="e.g. mcq"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-[var(--text)]">Marks</label>
+                  <input
+                    type="number"
+                    value={questionForm.marks}
+                    onChange={e => setQuestionForm({ ...questionForm, marks: Number(e.target.value) })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)] focus:border-purple-500/50 focus:outline-none"
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[var(--text)]">Question Text</label>
                 <textarea
-                  value={newQuestion.text}
-                  onChange={e => setNewQuestion({ ...newQuestion, text: e.target.value })}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 focus:border-purple-500/50 focus:outline-none focus:ring-4 focus:ring-purple-500/10 transition-all min-h-[100px]"
-                  placeholder="e.g., What was the primary purpose of the ARPANET?"
+                  value={questionForm.text}
+                  onChange={e => setQuestionForm({ ...questionForm, text: e.target.value })}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)] placeholder:text-[var(--text-muted)]/50 focus:border-purple-500/50 focus:outline-none min-h-[60px] h-16"
+                  placeholder="e.g. What is a smart contract?"
                 />
               </div>
 
               <div>
-                <label className="mb-3 block text-sm font-bold text-[var(--text)]">Answer Options</label>
-                <div className="space-y-3">
-                  {newQuestion.options.map((opt, idx) => (
+                <label className="mb-2.5 block text-xs font-bold text-[var(--text)]">Answer Choices</label>
+                <div className="space-y-2.5">
+                  {questionForm.options.map((opt, idx) => (
                     <div
                       key={idx}
-                      className={`flex items-center gap-3 rounded-xl border p-2 pl-4 transition-all ${newQuestion.correctOption === idx ? 'border-emerald-500/50 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'border-[var(--border)] bg-[var(--bg)] focus-within:border-purple-500/50 focus-within:ring-4 focus-within:ring-purple-500/10'}`}
+                      className={`flex items-center gap-3 rounded-xl border p-1.5 pl-3 transition-all ${questionForm.correctOptionIndex === idx
+                        ? "border-emerald-500/50 bg-emerald-500/5 shadow-[0_0_10px_rgba(16,185,129,0.05)]"
+                        : "border-[var(--border)] bg-[var(--bg)]"
+                        }`}
                     >
                       <button
                         type="button"
-                        onClick={() => setNewQuestion({ ...newQuestion, correctOption: idx })}
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${newQuestion.correctOption === idx ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--text-muted)] hover:border-[var(--text)]'}`}
+                        onClick={() => setQuestionForm({ ...questionForm, correctOptionIndex: idx })}
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${questionForm.correctOptionIndex === idx
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : "border-[var(--text-muted)] hover:border-[var(--text)]"
+                          }`}
                       >
-                        {newQuestion.correctOption === idx && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        {questionForm.correctOptionIndex === idx && <CheckCircle2 className="h-3 w-3" />}
                       </button>
                       <span className="text-xs font-black uppercase text-[var(--text-muted)] w-4 text-center">
                         {String.fromCharCode(65 + idx)}
@@ -1040,36 +1688,45 @@ export default function StudentDashboardPage({
                         type="text"
                         value={opt}
                         onChange={e => {
-                          const newOpts = [...newQuestion.options];
+                          const newOpts = [...questionForm.options];
                           newOpts[idx] = e.target.value;
-                          setNewQuestion({ ...newQuestion, options: newOpts });
+                          setQuestionForm({ ...questionForm, options: newOpts });
                         }}
-                        className="flex-1 bg-transparent py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/50 focus:outline-none"
-                        placeholder={`Option ${idx + 1}`}
+                        className="flex-1 bg-transparent py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--text-muted)]/50 focus:outline-none"
+                        placeholder={`Choice ${String.fromCharCode(65 + idx)}`}
                       />
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-xs font-medium text-[var(--text-muted)] flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Select the circle next to the correct answer.
-                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-[var(--text)]">Explanation (Optional)</label>
+                <textarea
+                  value={questionForm.explanation}
+                  onChange={e => setQuestionForm({ ...questionForm, explanation: e.target.value })}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--text)] placeholder:text-[var(--text-muted)]/50 focus:border-purple-500/50 focus:outline-none min-h-[50px] h-12"
+                  placeholder="Explain why this option is correct..."
+                />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] p-6 bg-[var(--bg)]/50">
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] p-4 bg-[var(--bg)]/50 shrink-0">
               <button
-                onClick={() => setAddingQuestionTo(null)}
-                className="rounded-xl px-5 py-2.5 text-sm font-bold text-[var(--text-muted)] hover:bg-[var(--border)]/50 hover:text-[var(--text)] transition"
+                type="button"
+                onClick={() => {
+                  setQuestionForm(null);
+                  setActiveQuestionIndex(null);
+                }}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--border)]/50 transition"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSaveQuestion}
-                className="flex items-center gap-2 rounded-xl bg-mst-red px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-mst-red/20 hover:brightness-110 transition-all"
+                onClick={handleSaveQuestionForm}
+                className="flex items-center gap-1.5 rounded-xl bg-mst-red px-5 py-2 text-xs font-bold text-white shadow-lg shadow-mst-red/20 hover:brightness-110 transition-all"
               >
-                <Save className="h-4 w-4" />
-                Save Question
+                <Save className="h-4 w-4" /> Save Question
               </button>
             </div>
           </div>
@@ -1345,6 +2002,39 @@ export default function StudentDashboardPage({
                 className="w-full rounded-xl bg-mst-red py-2.5 text-sm font-bold text-white shadow-md hover:brightness-110 transition-all"
               >
                 Okay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {customConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-5 bg-[var(--bg)]/50">
+              <h3 className="text-lg font-black text-[var(--text)]">{customConfirm.title}</h3>
+              <button onClick={() => setCustomConfirm(null)} className="rounded-full p-2 text-[var(--text-muted)] hover:bg-[var(--border)]/50 transition">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                {customConfirm.message}
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--border)] p-5 bg-[var(--bg)]/50">
+              <button
+                onClick={() => setCustomConfirm(null)}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-[var(--text-muted)] hover:bg-[var(--border)]/50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={customConfirm.onConfirm}
+                className="flex items-center gap-2 rounded-xl bg-mst-red px-5 py-2 text-sm font-bold text-white shadow-lg shadow-mst-red/20 hover:brightness-110 transition-all"
+              >
+                Confirm
               </button>
             </div>
           </div>

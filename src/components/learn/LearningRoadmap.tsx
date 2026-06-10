@@ -533,7 +533,7 @@ export function LearningRoadmap({ curriculum: initialCurriculum }: { curriculum:
   } = useRoadmapStore();
 
   const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
-  const courseId = "6a1a8a4b72fa89699a4f016a";
+  const courseId = "6a2934912b48a13769669f8e";
 
   const [fetchedPhases, setFetchedPhases] = useState<any[]>(() => {
     if (typeof window !== "undefined") {
@@ -687,8 +687,41 @@ export function LearningRoadmap({ curriculum: initialCurriculum }: { curriculum:
               })
             );
 
+            // Sync with DB assignments
+            let assignmentsList: any[] = [];
+            try {
+              const assignRes = await fetchWithAuth(`${baseURL}/api/assignments`);
+              if (assignRes.ok) {
+                const assignData = await assignRes.json();
+                assignmentsList = Array.isArray(assignData)
+                  ? assignData
+                  : (assignData.data || assignData.assignments || []);
+              }
+            } catch (err) {
+              console.error("Error fetching assignments list:", err);
+            }
+
+            const activeSubmoduleIds = new Set<string>();
+            const marksMap = new Map<string, number>();
+            assignmentsList.forEach((asn: any) => {
+              const subId = asn.submoduleId || asn.subModuleId;
+              if (subId) {
+                activeSubmoduleIds.add(subId);
+                marksMap.set(subId, asn.questions ? asn.questions.length : 0);
+              }
+            });
+
+            const syncedSubmodules = detailedSubmodules.map((sub: any) => {
+              const hasDbAss = activeSubmoduleIds.has(sub.id) || activeSubmoduleIds.has(sub._id);
+              return {
+                ...sub,
+                hasAssessment: hasDbAss || sub.hasAssessment,
+                totalMarks: hasDbAss ? (marksMap.get(sub.id) || marksMap.get(sub._id) || sub.totalMarks) : sub.totalMarks
+              };
+            });
+
             setFetchedSubmodules((prev) => {
-              const next = { ...prev, [String(activeModuleId)]: detailedSubmodules };
+              const next = { ...prev, [String(activeModuleId)]: syncedSubmodules };
               if (typeof window !== "undefined") {
                 localStorage.setItem("roadmap_submodules", JSON.stringify(next));
               }

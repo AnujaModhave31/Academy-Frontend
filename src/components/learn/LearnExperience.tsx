@@ -173,9 +173,8 @@ export function LearnExperience({ curriculum }: { curriculum: Curriculum }) {
               <button
                 type="button"
                 onClick={() => togglePhase(phase.id)}
-                className={`relative w-full overflow-hidden rounded-2xl border-2 p-[1px] transition-all duration-300 ${
-                  isExpanded ? meta.borderColor + " shadow-lg" : "border-[var(--border)] hover:border-[var(--text-muted)]/30 hover:shadow-md"
-                }`}
+                className={`relative w-full overflow-hidden rounded-2xl border-2 p-[1px] transition-all duration-300 ${isExpanded ? meta.borderColor + " shadow-lg" : "border-[var(--border)] hover:border-[var(--text-muted)]/30 hover:shadow-md"
+                  }`}
               >
                 <div className={`absolute inset-0 bg-gradient-to-r ${meta.gradient} transition-opacity duration-300 ${isExpanded ? "opacity-10" : "opacity-5 group-hover:opacity-8"}`} />
                 <div className="relative flex items-center gap-4 rounded-[14px] bg-[var(--surface)] px-5 py-4 sm:px-6 sm:py-5">
@@ -224,13 +223,12 @@ export function LearnExperience({ curriculum }: { curriculum: Curriculum }) {
                         <div className="absolute -left-[calc(1rem+5px)] sm:-left-[calc(2rem+5px)] top-5 h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: meta.color, background: status === "completed" ? meta.color : "var(--surface)" }} />
 
                         {/* Module card */}
-                        <div className={`rounded-xl border transition-all duration-200 ${
-                          status === "active"
-                            ? "border-mst-red/30 bg-[var(--surface)] shadow-md"
-                            : status === "completed"
-                              ? "border-green-500/20 bg-[var(--surface)]"
-                              : "border-[var(--border)] bg-[var(--bg-muted)] opacity-75"
-                        }`}>
+                        <div className={`rounded-xl border transition-all duration-200 ${status === "active"
+                          ? "border-mst-red/30 bg-[var(--surface)] shadow-md"
+                          : status === "completed"
+                            ? "border-green-500/20 bg-[var(--surface)]"
+                            : "border-[var(--border)] bg-[var(--bg-muted)] opacity-75"
+                          }`}>
                           <button
                             type="button"
                             onClick={() => toggleModule(mod.id)}
@@ -274,16 +272,14 @@ export function LearnExperience({ curriculum }: { curriculum: Curriculum }) {
                                 const allDone = lessonDone && assessDone;
 
                                 return (
-                                  <div key={sub.slug} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all ${
-                                    subLocked
-                                      ? "opacity-50"
-                                      : allDone
-                                        ? "bg-green-500/5 hover:bg-green-500/10"
-                                        : "hover:bg-[var(--bg-muted)]"
-                                  }`}>
-                                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${
-                                      allDone ? "bg-green-500 text-white" : subLocked ? "bg-[var(--border)] text-[var(--text-muted)]" : "bg-mst-red/10 text-mst-red"
+                                  <div key={sub.slug} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all ${subLocked
+                                    ? "opacity-50"
+                                    : allDone
+                                      ? "bg-green-500/5 hover:bg-green-500/10"
+                                      : "hover:bg-[var(--bg-muted)]"
                                     }`}>
+                                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${allDone ? "bg-green-500 text-white" : subLocked ? "bg-[var(--border)] text-[var(--text-muted)]" : "bg-mst-red/10 text-mst-red"
+                                      }`}>
                                       {allDone ? <CheckCircle2 size={14} /> : subLocked ? <Lock size={12} /> : sub.id.split(".")[1]}
                                     </div>
                                     <div className="flex-1 min-w-0">

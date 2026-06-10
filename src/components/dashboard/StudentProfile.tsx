@@ -42,7 +42,6 @@ export function StudentProfile({ user }: { user: AuthUser | null }) {
         if (response.ok) {
           const data = await response.json();
           if (data?.user) {
-            // Update state with API response data if available
             setFormData(prev => ({
               ...prev,
               fullName: data.user.fullName || data.user.name || prev.fullName,
@@ -111,7 +110,7 @@ export function StudentProfile({ user }: { user: AuthUser | null }) {
     >
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl" />
       <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-mst-red/10 blur-3xl" />
-      
+
       <div className="relative">
         <h2 className="text-2xl font-black text-[var(--text)] sm:text-3xl mb-6">
           Your Profile
@@ -128,16 +127,16 @@ export function StudentProfile({ user }: { user: AuthUser | null }) {
                   <User size={48} />
                 </div>
               )}
-              <div 
+              <div
                 className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Camera className="text-white" size={24} />
               </div>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
                 accept="image/*"
                 onChange={handlePhotoUpload}
               />

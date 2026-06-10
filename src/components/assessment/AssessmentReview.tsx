@@ -240,7 +240,7 @@ export function AssessmentReview({
                     className="prose prose-sm max-w-none text-xs text-[var(--text-muted)] leading-relaxed"
                     dangerouslySetInnerHTML={{
                       __html: sanitizeHtml(
-                        r.explanation || r.modelAnswer || q?.modelAnswer || "No explanation provided."
+                        r.explanation || r.modelAnswer || q?.modelAnswer || q?.explanation || "No explanation provided."
                       ),
                     }}
                   />

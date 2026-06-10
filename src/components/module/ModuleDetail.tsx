@@ -38,23 +38,76 @@ export function ModuleDetail({
   const getSlugs = (id: number) => moduleSlugMap[id] ?? [];
   const { isAdmin, ready: authReady } = useAuth();
   const [, setRefresh] = useState(0);
+  const [localSubmodules, setLocalSubmodules] = useState(mod.submodules);
+
   useEffect(() => {
     if (authReady) setRefresh((n) => n + 1);
   }, [authReady, isAdmin]);
 
-  const slugs = mod.submodules.map((s) => s.slug);
+  useEffect(() => {
+    setLocalSubmodules(mod.submodules);
+
+    async function syncAssignments() {
+      try {
+        const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+        const token = typeof window !== "undefined" ? localStorage.getItem("admin-token") : null;
+        const headers: Record<string, string> = {
+          "Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        const res = await fetch(`${baseURL}/api/assignments`, {
+          credentials: "include",
+          headers
+        });
+        if (res.ok) {
+          const assignmentsList = await res.json();
+          const list = Array.isArray(assignmentsList)
+            ? assignmentsList
+            : (assignmentsList.data || assignmentsList.assignments || []);
+
+          const activeSubmoduleIds = new Set<string>();
+          const marksMap = new Map<string, number>();
+          list.forEach((asn: any) => {
+            const subId = asn.submoduleId || asn.subModuleId;
+            if (subId) {
+              activeSubmoduleIds.add(subId);
+              marksMap.set(subId, asn.questions ? asn.questions.length : 0);
+            }
+          });
+
+          setLocalSubmodules(prev => prev.map(sub => {
+            const hasDbAss = activeSubmoduleIds.has(sub.id);
+            const isEnabled = hasDbAss || sub.hasAssessment;
+            return {
+              ...sub,
+              hasAssessment: isEnabled,
+              totalMarks: hasDbAss ? (marksMap.get(sub.id) || sub.totalMarks) : sub.totalMarks
+            };
+          }));
+        }
+      } catch (err) {
+        console.error("Error syncing assignments:", err);
+      }
+    }
+    syncAssignments();
+  }, [mod, authReady]);
+
+  const slugs = localSubmodules.map((s) => s.slug);
   const progress = getModuleProgressPercent(mod.id, slugs);
   const status = getModuleStatus(mod.id, allModuleIds, slugs, getSlugs);
   const locked = status === "locked";
   const completed = status === "completed";
 
-  const completedCount = mod.submodules.filter((sub) => {
+  const completedCount = localSubmodules.filter((sub) => {
     const p = getSubmoduleProgress(mod.id, sub.slug);
     return p.lessonComplete && p.assessmentComplete;
   }).length;
 
-  const totalMarks = mod.submodules.reduce((sum, sub) => sum + sub.totalMarks, 0);
-  const earnedMarks = mod.submodules.reduce((sum, sub) => {
+  const totalMarks = localSubmodules.reduce((sum, sub) => sum + sub.totalMarks, 0);
+  const earnedMarks = localSubmodules.reduce((sum, sub) => {
     const p = getSubmoduleProgress(mod.id, sub.slug);
     return sum + (p.score || 0);
   }, 0);
@@ -106,12 +159,12 @@ export function ModuleDetail({
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center shadow-sm">
                 <BookOpen size={20} className="mx-auto text-mst-red" />
-                <p className="mt-2 text-2xl font-black text-[var(--text)]">{mod.submodules.length}</p>
+                <p className="mt-2 text-2xl font-black text-[var(--text)]">{localSubmodules.length}</p>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Lessons</p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center shadow-sm">
                 <ClipboardCheck size={20} className="mx-auto text-blue-500" />
-                <p className="mt-2 text-2xl font-black text-[var(--text)]">{completedCount}/{mod.submodules.length}</p>
+                <p className="mt-2 text-2xl font-black text-[var(--text)]">{completedCount}/{localSubmodules.length}</p>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Done</p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center shadow-sm">
@@ -161,10 +214,10 @@ export function ModuleDetail({
         </p>
 
         <div className="mt-6 space-y-3">
-          {mod.submodules.map((sub, i) => {
+          {localSubmodules.map((sub, i) => {
             const p = getSubmoduleProgress(mod.id, sub.slug);
             const done = p.lessonComplete && p.assessmentComplete;
-            const subLocked = isSubmoduleLocked(locked, i, mod.id, mod.submodules);
+            const subLocked = isSubmoduleLocked(locked, i, mod.id, localSubmodules);
             const scoreText = p.score !== undefined && p.maxScore
               ? `${p.score}/${p.maxScore} (${Math.round((p.score / p.maxScore) * 100)}%)`
               : null;
@@ -172,23 +225,21 @@ export function ModuleDetail({
             return (
               <div
                 key={sub.slug}
-                className={`group rounded-2xl border p-5 transition-all duration-200 ${
-                  subLocked
-                    ? "border-[var(--border)] bg-[var(--bg-muted)] opacity-70"
-                    : done
-                      ? "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
-                      : "border-[var(--border)] bg-[var(--surface)] hover:border-mst-red/30 hover:shadow-lg hover:shadow-mst-red/5"
-                }`}
+                className={`group rounded-2xl border p-5 transition-all duration-200 ${subLocked
+                  ? "border-[var(--border)] bg-[var(--bg-muted)] opacity-70"
+                  : done
+                    ? "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
+                    : "border-[var(--border)] bg-[var(--surface)] hover:border-mst-red/30 hover:shadow-lg hover:shadow-mst-red/5"
+                  }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex gap-4">
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black ${
-                      done
-                        ? "bg-green-500 text-white"
-                        : subLocked
-                          ? "bg-[var(--bg-muted)] text-[var(--text-muted)] border border-[var(--border)]"
-                          : "bg-mst-red/10 text-mst-red"
-                    }`}>
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black ${done
+                      ? "bg-green-500 text-white"
+                      : subLocked
+                        ? "bg-[var(--bg-muted)] text-[var(--text-muted)] border border-[var(--border)]"
+                        : "bg-mst-red/10 text-mst-red"
+                      }`}>
                       {done ? <CheckCircle2 size={20} /> : sub.id}
                     </div>
                     <div>
@@ -213,9 +264,8 @@ export function ModuleDetail({
                           </span>
                         )}
                         {p.assessmentComplete && scoreText && (
-                          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            p.passed ? "bg-green-500/10 text-green-600" : "bg-amber-500/10 text-amber-600"
-                          }`}>
+                          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${p.passed ? "bg-green-500/10 text-green-600" : "bg-amber-500/10 text-amber-600"
+                            }`}>
                             {p.passed ? <CheckCircle2 size={10} /> : <Clock size={10} />}
                             Score: {scoreText}
                           </span>
@@ -266,9 +316,9 @@ export function ModuleDetail({
             <ArrowLeft size={16} />
             Back to Learning Tree
           </Link>
-          {mod.submodules[0] && !locked && (
+          {localSubmodules[0] && !locked && (
             <Link
-              href={`/module/${mod.id}/${mod.submodules[0].slug}`}
+              href={`/module/${mod.id}/${localSubmodules[0].slug}`}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-mst-red to-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-mst-red/20 transition hover:shadow-mst-red/40"
             >
               <Zap size={16} />

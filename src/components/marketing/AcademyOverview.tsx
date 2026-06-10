@@ -254,22 +254,21 @@ function ModuleSubmodulesList({
   color: string;
 }) {
   const moduleId = mod._id || mod.id;
-  const [submodules, setSubmodules] = useState<any[]>(() => {
-    if (typeof window !== "undefined") {
-      const cached = localStorage.getItem(`academy_overview_submodules_${moduleId}`);
-      if (cached) return JSON.parse(cached);
-    }
-    return mod.submodules || [];
-  });
+  const [submodules, setSubmodules] = useState<any[]>(mod.submodules || []);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    async function fetchSubmodules() {
-      if (typeof window !== "undefined" && localStorage.getItem(`academy_overview_submodules_${moduleId}`)) {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem(`academy_overview_submodules_${moduleId}`);
+      if (cached) {
+        setSubmodules(JSON.parse(cached));
         return;
       }
+    }
+
+    async function fetchSubmodules() {
       setLoading(true);
       try {
         //Get single module
@@ -361,13 +360,7 @@ function PhaseSection({
 }) {
   const phaseId = phase._id || phase.id;
   const [open, setOpen] = useState(index === 0);
-  const [modules, setModules] = useState<any[]>(() => {
-    if (typeof window !== "undefined") {
-      const cached = localStorage.getItem(`academy_overview_modules_${phaseId}`);
-      if (cached) return JSON.parse(cached);
-    }
-    return initialModules;
-  });
+  const [modules, setModules] = useState<any[]>(initialModules);
   const [loading, setLoading] = useState(false);
   const [openModules, setOpenModules] = useState<Set<string | number>>(
     () => new Set()
@@ -376,10 +369,15 @@ function PhaseSection({
   useEffect(() => {
     if (!open) return;
 
-    async function fetchModules() {
-      if (typeof window !== "undefined" && localStorage.getItem(`academy_overview_modules_${phaseId}`)) {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem(`academy_overview_modules_${phaseId}`);
+      if (cached) {
+        setModules(JSON.parse(cached));
         return;
       }
+    }
+
+    async function fetchModules() {
       setLoading(true);
       try {
         //Get single phase
@@ -517,23 +515,21 @@ function PhaseSection({
 
 export function AcademyOverview({ curriculum }: AcademyOverviewProps) {
   const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
-  const courseId = "6a1a8a4b72fa89699a4f016a";
+  const courseId = "6a2934912b48a13769669f8e";
 
-  const [phases, setPhases] = useState<any[]>(() => {
-    if (typeof window !== "undefined") {
-      const cached = localStorage.getItem("academy_overview_phases");
-      if (cached) return JSON.parse(cached);
-    }
-    return curriculum?.phases || [];
-  });
+  const [phases, setPhases] = useState<any[]>(curriculum?.phases || []);
   const [loading, setLoading] = useState(false);
 
   //Get phases by course
   useEffect(() => {
-    async function loadPhases() {
-      if (typeof window !== "undefined" && localStorage.getItem("academy_overview_phases")) {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("academy_overview_phases");
+      if (cached) {
+        setPhases(JSON.parse(cached));
         return;
       }
+    }
+    async function loadPhases() {
       setLoading(true);
       try {
         const res = await fetchWithAuth(`${baseURL}/api/phases/course/${courseId}`);
